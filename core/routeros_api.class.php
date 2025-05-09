@@ -444,6 +444,7 @@ function enc_rypt($string, $key = 128)
     }
     return base64_encode($result);
 }
+
 function dec_rypt($string, $key = 128)
 {
     $result = '';
