@@ -162,12 +162,105 @@ function setClassYN(e, t) {
     countTableRow(e);
 }
 function printVcr(e) {
-  "vc" == e.split("-")[0] || "up" == e.split("-")[0]
-    ? ($("#printVcr").show(),
-      $("#printVcrS").show(),
-      $("#printVcr").attr("onclick", 'pVcr("' + e + '","d")'),
-      $("#printVcrS").attr("onclick", 'pVcr("' + e + '","s")'))
-    : ($("#printVcr").hide(), $("#printVcrS").hide());
+  if (e && ("vc" == e.split("-")[0] || "up" == e.split("-")[0])) {
+    $("#printVcr, .printVcr").show();
+    $("#printVcrS, .printVcrS").show();
+    $("#printVcrT, .printVcrT").show();
+    $("#btnRemByComment, .btnRemByComment").show();
+    $("#printVcr, .printVcr").attr("onclick", 'pVcr("' + e + '","d")');
+    $("#printVcrS, .printVcrS").attr("onclick", 'pVcr("' + e + '","s")');
+    $("#printVcrT, .printVcrT").attr("onclick", 'pVcr("' + e + '","t")');
+  } else if (e && e !== "") {
+    $("#printVcr, .printVcr").hide();
+    $("#printVcrS, .printVcrS").hide();
+    $("#printVcrT, .printVcrT").hide();
+    $("#btnRemByComment, .btnRemByComment").show();
+  } else {
+    $("#printVcr, .printVcr").hide();
+    $("#printVcrS, .printVcrS").hide();
+    $("#printVcrT, .printVcrT").hide();
+    $("#btnRemByComment, .btnRemByComment").hide();
+  }
+}
+function removeByComment(c) {
+  var comm = c || $("#select-comment").val();
+  if (!comm || comm === "" || comm === "Comment") {
+    alert("Please select a comment first!");
+    return;
+  }
+  if (confirm("Are you sure want to remove all users with comment [" + comm + "] ?")) {
+    var s = session;
+    $.ajax({
+      type: "POST",
+      url: "./post/post_hotspot_remove.php",
+      data: { sessname: s, where: "user_comment", id: comm },
+      dataType: "json",
+      success: function (res) {
+        if (res && res.message === "success") {
+          $("#select-comment").val("");
+          printVcr("");
+          loadUsersPPF();
+        } else {
+          location.reload();
+        }
+      },
+      error: function () {
+        loadUsersPPF();
+      }
+    });
+  }
+}
+function removeExpiredUsers() {
+  if (confirm("Are you sure want to remove all expired hotspot users?")) {
+    var s = session;
+    $.ajax({
+      type: "POST",
+      url: "./post/post_hotspot_remove.php",
+      data: { sessname: s, where: "user_expired", id: "expired" },
+      dataType: "json",
+      success: function (res) {
+        if (res && res.message === "success") {
+          loadUsersPPF();
+        } else {
+          location.reload();
+        }
+      },
+      error: function () {
+        loadUsersPPF();
+      }
+    });
+  }
+}
+function toggleUser() {
+  var uid = $("#add_usrid").val();
+  var uname = $("#add_usrname").val();
+  if (!uid || uid === "0") return;
+  var isDis = $("#btn-toggle-user").text().indexOf("Enable") >= 0;
+  var actionText = isDis ? "enable" : "disable";
+  if (confirm("Are you sure want to " + actionText + " user [" + uname + "] ?")) {
+    $("#add_usrmsg").html("<span class='text-yellow'><i class='fa fa-circle'></i></span> processing...");
+    var s = session;
+    $.ajax({
+      type: "POST",
+      url: "./post/post_hotspot_remove.php",
+      data: { sessname: s, where: "user_toggle", id: uid, disabled: isDis ? "no" : "yes" },
+      dataType: "json",
+      success: function (res) {
+        $("#huClose").click();
+        loadUsersPPF();
+      },
+      error: function () {
+        $("#huClose").click();
+        loadUsersPPF();
+      }
+    });
+  }
+}
+function printSingleUser(template) {
+  var uid = $("#add_usrid").val();
+  if (uid && uid !== "0") {
+    window.open(session + "/print&" + template + "&uid=" + uid, "_blank");
+  }
 }
 function pVcr(e, t) {
   window.open(session + "/print&" + t + "&c=" + e, "_blank");
@@ -772,8 +865,14 @@ function openUser(e, t) {
           : (n && "up-" == n.substr(0, 3)) || (n && "vc-" == n.substr(0, 3))
           ? ($("#ucode").val(n.substr(0, 3)),
             $("#add_usrcomm").val(n.substr(3, n.length)))
-          : $("#add_usrcomm").val(n),
-          $("#addh_user").fadeIn(),
+          : $("#add_usrcomm").val(n);
+        var isDis = (e[0].disabled === "true" || e[0].disabled === true || e[0].disabled === "yes");
+        if (isDis) {
+          $("#btn-toggle-user").html('<i class="fa fa-unlock"></i> Enable').removeClass('bg-secondary').addClass('bg-success');
+        } else {
+          $("#btn-toggle-user").html('<i class="fa fa-lock"></i> Disable').removeClass('bg-success').addClass('bg-secondary');
+        }
+        $("#addh_user").fadeIn(),
           noR(1);
       }
     });
@@ -2685,36 +2784,157 @@ function confirmRouterPower(action) {
 }
 
 // ------------------------------------------
-// 8. Export Users to RouterOS RSC Script
+// 8. Export Users to RouterOS RSC Script & CSV
 // ------------------------------------------
 function exportUsersRSC() {
-  var rows = $("#users tr.yes");
-  if (rows.length === 0) {
-    alert("No users to export!");
-    return;
-  }
-  var rsc = "# Generated by MIKHMON v4\n# Exported Hotspot Users\n/ip hotspot user\n";
+  var prof = $("#select-profile").val() || "";
+  var comm = $("#select-comment").val() || "";
+  var url = session + "/export_users&export=rsc&prof=" + encodeURIComponent(prof) + "&comm=" + encodeURIComponent(comm);
+  window.open(url, "_blank");
+}
+function exportUsersCSV() {
+  var prof = $("#select-profile").val() || "";
+  var comm = $("#select-comment").val() || "";
+  var url = session + "/export_users&export=csv&prof=" + encodeURIComponent(prof) + "&comm=" + encodeURIComponent(comm);
+  window.open(url, "_blank");
+}
+
+// ------------------------------------------
+// 9. Resume Sales Report & Chart
+// ------------------------------------------
+function showReportTab() {
+  $("#selling-report").removeClass("hide").show();
+  $("#report-resume, #report-resume-m").addClass("hide").hide();
+  $("#btn-selling-report, #btn-selling-report-m").addClass("active");
+  $("#btn-report-resume, #btn-report-resume-m").removeClass("active");
+}
+
+function loadReportResume() {
+  $("#selling-report").addClass("hide").hide();
+  $("#report-resume, #report-resume-m").removeClass("hide").show();
+  $("#btn-selling-report, #btn-selling-report-m").removeClass("active");
+  $("#btn-report-resume, #btn-report-resume-m").addClass("active");
+  renderReportResumeChart();
+}
+
+function renderReportResumeChart() {
+  var rows = $("#report tr.yes");
+  var monthName = ($("#month").val() || "").capitalize();
+  var year = $("#year").val() || (new Date()).getFullYear();
+  var curr = (typeof currency !== "undefined" && currency) ? currency : (localStorage.getItem(session + "_curr") || "");
+
+  var salesByDay = {};
+  var vcrByDay = {};
+  var totalSales = 0;
+  var totalVcr = 0;
+
   for (var i = 0; i < rows.length; i++) {
-    var cells = rows[i].querySelectorAll("td");
-    if (cells.length >= 6) {
-      var server = cells[1].innerText.trim() || "all";
-      var name = cells[2].innerText.trim();
-      var profile = cells[3].innerText.trim();
-      var comment = cells[7] ? cells[7].innerText.trim() : "";
-      if (name) {
-        rsc += 'add server="' + server + '" name="' + name + '" profile="' + profile + '"';
-        if (comment) rsc += ' comment="' + comment + '"';
-        rsc += "\n";
+    var row = rows[i];
+    var priceText = $(row).find("td.text-right span").text();
+    var price = parseFloat(priceText.replace(/[^0-9.-]+/g, "")) || 0;
+    
+    var className = row.className || "";
+    var m = className.match(/[a-z]{3}(\d{2})\d{4}/i);
+    var dayStr = "";
+    if (m && m[1]) {
+      dayStr = m[1];
+    } else {
+      var text = $(row).text();
+      var m2 = text.match(/[a-z]{3}\/(\d{2})\/\d{4}/i);
+      if (m2 && m2[1]) {
+        dayStr = m2[1];
       }
     }
+
+    if (dayStr) {
+      salesByDay[dayStr] = (salesByDay[dayStr] || 0) + price;
+      vcrByDay[dayStr] = (vcrByDay[dayStr] || 0) + 1;
+    }
+    totalSales += price;
+    totalVcr += 1;
   }
-  var filename = "hotspot-users-" + session.replace("?", "") + ".rsc";
-  var blob = new Blob([rsc], { type: "text/plain;charset=utf-8" });
-  var a = document.createElement("a");
-  a.download = filename;
-  a.href = window.URL.createObjectURL(blob);
-  a.style.display = "none";
-  document.body.appendChild(a);
-  a.click();
+
+  var activeDays = Object.keys(salesByDay).length;
+  var avgSales = activeDays > 0 ? Math.round(totalSales / activeDays) : 0;
+
+  var fmtTotal = typeof priceFormat === "function" ? curr + " " + priceFormat(totalSales) : curr + " " + totalSales;
+  var fmtAvg = typeof priceFormat === "function" ? curr + " " + priceFormat(avgSales) : curr + " " + avgSales;
+
+  $("#resume-total-sales, #resume-total-sales-m").text(fmtTotal);
+  $("#resume-total-vcr, #resume-total-vcr-m").text(totalVcr + " Vouchers");
+  $("#resume-avg-sales, #resume-avg-sales-m").text(fmtAvg);
+
+  var mIndex = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"].indexOf(($("#month").val() || "").toLowerCase());
+  var daysCount = 31;
+  if (mIndex >= 0) {
+    daysCount = new Date(Number(year), mIndex + 1, 0).getDate();
+  }
+
+  var chartCategories = [];
+  var chartSeriesData = [];
+
+  for (var d = 1; d <= daysCount; d++) {
+    var dStr = d < 10 ? "0" + d : "" + d;
+    var daySales = salesByDay[dStr] || 0;
+    var dayVcr = vcrByDay[dStr] || 0;
+    chartCategories.push(dStr);
+    chartSeriesData.push({
+      y: daySales,
+      vcr: dayVcr,
+      name: dStr + " " + monthName
+    });
+  }
+
+  var containerId = isMobile() ? "container-m" : "container";
+  if (!document.getElementById(containerId)) {
+    containerId = document.getElementById("container") ? "container" : "container-m";
+  }
+
+  if (typeof Highcharts !== "undefined" && document.getElementById(containerId)) {
+    Highcharts.chart(containerId, {
+      chart: {
+        height: isMobile() ? 350 : 450,
+        type: "area"
+      },
+      title: {
+        text: "Selling Report " + monthName + " " + year
+      },
+      subtitle: {
+        text: "Total Sales: " + fmtTotal + " (" + totalVcr + " Vouchers)"
+      },
+      xAxis: {
+        categories: chartCategories,
+        tickInterval: 1
+      },
+      yAxis: {
+        title: {
+          text: "Total Sales (" + curr + ")"
+        },
+        min: 0
+      },
+      legend: {
+        enabled: false
+      },
+      plotOptions: {
+        series: {
+          color: "#20a8d8",
+          fillOpacity: 0.3
+        }
+      },
+      series: [{
+        name: "Sales",
+        data: chartSeriesData
+      }],
+      tooltip: {
+        formatter: function () {
+          var vCount = this.point.vcr || 0;
+          var val = typeof priceFormat === "function" ? curr + " " + priceFormat(this.y) : curr + " " + this.y;
+          return "<b>" + this.x + " " + monthName + " " + year + "</b><br/>" +
+                 "Sales: <b>" + val + "</b><br/>" +
+                 "Vouchers: <b>" + vCount + "</b>";
+        }
+      }
+    });
+  }
 }
 

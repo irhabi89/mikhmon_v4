@@ -48,6 +48,8 @@ if($m_user != "admin" && !isMobile()){
   <a href="?<?= $m_user ?>/report" class="sidenav_item <?= $report_ma ?>" ><i class="fa fa-money"></i> Report</a>
   <a href="?<?= $m_user ?>/system" class="sidenav_item <?= $system_ma ?>" ><i class="fa fa-server"></i> System</a>
   <a href="?admin/settings/&r=<?= $m_user ?>" class="sidenav_item <?= $settings_ma ?>" ><i class="fa fa-gear"></i> Settings</a>
+  <a href="?admin/template_editor" class="sidenav_item <?= $editor_ma ?>" ><i class="fa fa-edit"></i> Template Editor</a>
+  <a href="?admin/about" class="sidenav_item <?= $about_ma ?>" ><i class="fa fa-info-circle"></i> About</a>
   
   <a class="sidenav_item" title="Idle Timeout">
     <i style="font-size: 16px" class="fa fa-hourglass-half mr-1"></i>
@@ -113,6 +115,8 @@ if($m_user != "admin" && !isMobile()){
   <a href="?<?= $m_user ?>/report" class="<?= $report_ma ?>" ><i class="fa fa-money"></i> Report</a>
   <a href="?<?= $m_user ?>/system" class="<?= $system_ma ?>" ><i class="fa fa-server"></i> System</a>
   <a href="?admin/settings/&r=<?= $m_user ?>" class="<?= $settings_ma ?>" ><i class="fa fa-gear"></i> Settings</a>
+  <a href="?admin/template_editor" class="<?= $editor_ma ?>" ><i class="fa fa-edit"></i> Template Editor</a>
+  <a href="?admin/about" class="<?= $about_ma ?>" ><i class="fa fa-info-circle"></i> About</a>
   <a  id="statconn" class="" title="Idle Timeout">
     <i style="font-size: 16px" class="fa fa-hourglass-half mr-1"></i>
     <span id="timer">10:00</span>

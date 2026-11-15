@@ -40,6 +40,7 @@ if($self[0] !== "index.php"  && $self[0] !==""){
     "get_dhcp_leases" => "get/get_dhcp_leases.php",
     "get_schedulers" => "get/get_schedulers.php",
     "get_quick_print" => "get/get_quick_print.php",
+    "export_users" => "get/get_export_users.php",
 
     //view
     "dashboard" => "view/dashboard.php",

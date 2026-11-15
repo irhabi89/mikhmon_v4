@@ -133,9 +133,15 @@ if ($self[0] !== "index.php"  && $self[0] !== "") {
 
                                             </select>
                                             <button id='printVcrS' title='Print with small template'
-                                                class='bg-btn-group pointer hide'><i class="fa fa-print"></i> Small</button>
+                                                class='bg-btn-group pointer printVcrS hide'><i class="fa fa-print"></i> Small</button>
                                             <button id='printVcr' title='Print with default template'
-                                                class='bg-btn-group pointer hide'><i class="fa fa-print"></i> Default</button>
+                                                class='bg-btn-group pointer printVcr hide'><i class="fa fa-print"></i> Default</button>
+                                            <button id='printVcrT' title='Print with thermal template'
+                                                class='bg-btn-group pointer printVcrT hide'><i class="fa fa-print"></i> Thermal</button>
+                                            <button id='btnRemByComment' title='Remove users by selected comment' onclick='removeByComment()'
+                                                class='bg-btn-group pointer btnRemByComment hide text-danger'><i class="fa fa-trash"></i> By Comment</button>
+                                            <button id='btnRemExpired' title='Remove all expired users' onclick='removeExpiredUsers()'
+                                                class='bg-btn-group pointer btnRemExpired text-danger'><i class="fa fa-trash"></i> Expired</button>
                                             <button onclick="exportToCSV('hotspot-users-'+session.replace('?','')+'.csv','users')" title='Export to CSV'
                                                 class='bg-btn-group pointer'><i class="fa fa-file-excel-o"></i> CSV</button>
                                             <button onclick="exportUsersRSC()" title='Export MikroTik Script (.rsc)'
@@ -503,11 +509,20 @@ if ($self[0] !== "index.php"  && $self[0] !== "") {
 
                                             </select>
                                             <button id='printVcrS' title='Print with small template'
-                                                class='btn-mobile bg-btn-group pointer '><i class="fa fa-print"></i>
+                                                class='btn-mobile bg-btn-group pointer printVcrS hide'><i class="fa fa-print"></i>
                                                 Small</button>
                                             <button id='printVcr' title='Print with default template'
-                                                class='btn-mobile bg-btn-group pointer hide'><i class="fa fa-print"></i>
+                                                class='btn-mobile bg-btn-group pointer printVcr hide'><i class="fa fa-print"></i>
                                                 Default</button>
+                                            <button id='printVcrT' title='Print with thermal template'
+                                                class='btn-mobile bg-btn-group pointer printVcrT hide'><i class="fa fa-print"></i>
+                                                Thermal</button>
+                                            <button id='btnRemByComment' title='Remove users by selected comment' onclick='removeByComment()'
+                                                class='btn-mobile bg-btn-group pointer btnRemByComment hide text-danger'><i class="fa fa-trash"></i>
+                                                By Comm</button>
+                                            <button id='btnRemExpired' title='Remove all expired users' onclick='removeExpiredUsers()'
+                                                class='btn-mobile bg-btn-group pointer btnRemExpired text-danger'><i class="fa fa-trash"></i>
+                                                Expired</button>
                                             <button onclick="exportToCSV('hotspot-users-'+session.replace('?','')+'.csv','users')" title='Export to CSV'
                                                 class='btn-mobile bg-btn-group pointer'><i class="fa fa-file-excel-o"></i> CSV</button>
                                             <button onclick="exportUsersRSC()" title='Export MikroTik Script (.rsc)'
@@ -902,6 +917,14 @@ if ($self[0] !== "index.php"  && $self[0] !== "") {
                                             class="fa fa-history"></i> Reset</button>
                                     <button class="btn bg-danger" style="float: right;" onclick="remUser()"><i
                                             class="fa fa-minus-square"></i> Remove</button>
+                                    <button id="btn-toggle-user" class="btn bg-secondary" style="float: right;" type="button" onclick="toggleUser()"><i
+                                            class="fa fa-lock"></i> Disable</button>
+                                    <button class="btn bg-btn-group" style="float: right;" type="button" onclick="printSingleUser('d')" title="Print Voucher (Default)"><i
+                                            class="fa fa-print"></i> Default</button>
+                                    <button class="btn bg-btn-group" style="float: right;" type="button" onclick="printSingleUser('s')" title="Print Voucher (Small)"><i
+                                            class="fa fa-print"></i> Small</button>
+                                    <button class="btn bg-btn-group" style="float: right;" type="button" onclick="printSingleUser('t')" title="Print Voucher (Thermal)"><i
+                                            class="fa fa-print"></i> Thermal</button>
                                 </span>
                             </td>
                         </tr>

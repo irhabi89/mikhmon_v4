@@ -9,7 +9,7 @@ include_once("../core/no_cache.php");
 
 if(isset($_POST['sessname']) && isset($_SESSION["mikhmon"])){
 
-    $m_user = explode("?",$_POST['sessname'])[1];
+    $m_user = strpos($_POST['sessname'], '?') !== false ? explode("?", $_POST['sessname'])[1] : $_POST['sessname'];
     $where = $_POST['where'];
     $id = $_POST['id'];
 
@@ -31,22 +31,58 @@ if(isset($_POST['sessname']) && isset($_SESSION["mikhmon"])){
     if($where == "user_"){
         $API->comm("/ip/hotspot/user/remove", array(
             ".id" => $id,));	
-    }else  if($where == "profile_"){
+    }else if($where == "user_comment"){
+        $getuser = $API->comm("/ip/hotspot/user/print", array(
+            "?comment" => $id,
+        ));
+        if (is_array($getuser)) {
+            foreach ($getuser as $u) {
+                if (isset($u['.id'])) {
+                    $API->comm("/ip/hotspot/user/remove", array(".id" => $u['.id']));
+                }
+            }
+        }
+    }else if($where == "user_expired"){
+        $getuser = $API->comm("/ip/hotspot/user/print", array(
+            "?limit-uptime" => "1s",
+        ));
+        if (is_array($getuser)) {
+            foreach ($getuser as $u) {
+                if (isset($u['.id'])) {
+                    $API->comm("/ip/hotspot/user/remove", array(".id" => $u['.id']));
+                }
+            }
+        }
+    }else if($where == "user_toggle"){
+        $user = $API->comm("/ip/hotspot/user/print", array("?.id" => $id));
+        if (!empty($user[0]['.id'])) {
+            if (isset($_POST['disabled']) && $_POST['disabled'] !== '') {
+                $new_state = ($_POST['disabled'] === 'yes' || $_POST['disabled'] === 'true') ? 'yes' : 'no';
+            } else {
+                $cur = isset($user[0]['disabled']) && ($user[0]['disabled'] === 'true' || $user[0]['disabled'] === true || $user[0]['disabled'] === 'yes');
+                $new_state = $cur ? 'no' : 'yes';
+            }
+            $API->comm("/ip/hotspot/user/set", array(
+                ".id" => $id,
+                "disabled" => $new_state,
+            ));
+        }
+    }else if($where == "profile_"){
         $API->comm("/ip/hotspot/user/profile/remove", array(
             ".id" => $id,));	
-    }else  if($where == "active_"){
+    }else if($where == "active_"){
         $API->comm("/ip/hotspot/active/remove", array(
             ".id" => $id,));	
-    }else  if($where == "host_"){
+    }else if($where == "host_"){
         $API->comm("/ip/hotspot/host/remove", array(
             ".id" => $id,));	
-    }else  if($where == "binding_"){
+    }else if($where == "binding_"){
         $API->comm("/ip/hotspot/ip-binding/remove", array(
             ".id" => $id,));
-    }else  if($where == "cookie_"){
+    }else if($where == "cookie_"){
         $API->comm("/ip/hotspot/cookie/remove", array(
             ".id" => $id,));
-    }else  if($where == "cookie_all"){
+    }else if($where == "cookie_all"){
         $all_cookies = $API->comm("/ip/hotspot/cookie/print");
         if (is_array($all_cookies)) {
             foreach ($all_cookies as $c) {
@@ -55,15 +91,26 @@ if(isset($_POST['sessname']) && isset($_SESSION["mikhmon"])){
                 }
             }
         }
-    }else  if($where == "dhcp_lease_"){
+    }else if($where == "dhcp_lease_"){
         $API->comm("/ip/dhcp-server/lease/remove", array(
             ".id" => $id,));
-    }else  if($where == "scheduler_"){
+    }else if($where == "scheduler_"){
         $API->comm("/system/scheduler/remove", array(
             ".id" => $id,));
-    }else  if($where == "quick_print_"){
+    }else if($where == "quick_print_"){
         $API->comm("/system/script/remove", array(
             ".id" => $id,));
+    }else if($where == "report_"){
+        if (strpos($id, "~") !== false) {
+            $uids = explode("~", $id);
+            foreach ($uids as $uid) {
+                if (!empty($uid)) {
+                    $API->comm("/system/script/remove", array(".id" => $uid));
+                }
+            }
+        } else {
+            $API->comm("/system/script/remove", array(".id" => $id));
+        }
     }
 
     $mess = array(

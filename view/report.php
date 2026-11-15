@@ -27,14 +27,12 @@ if(!isMobile()){
             </div>
             <div class="card-body">
             <div class="row">
-                <!-- <div class="col-12 mr-b-10">
+                <div class="col-12 mr-b-10">
                     <div class="btn-group">
-                        <button class="bg-btn-group" onclick="loadSReport()" id="btn-selling-report"><i class="fa fa-list" ></i> Report</button> 
-                        <button class="bg-btn-group" onclick="loadReportResume()" id="btn-report-resume"><i class="fa fa-chars" ></i> Resume</button>
-                        
+                        <button class="bg-btn-group active" onclick="showReportTab()" id="btn-selling-report"><i class="fa fa-list" ></i> Report</button> 
+                        <button class="bg-btn-group" onclick="loadReportResume()" id="btn-report-resume"><i class="fa fa-area-chart" ></i> Resume</button>
                     </div>
-                    
-                </div> -->
+                </div>
                 
                 <div class="col-12 hide" id="selling-report">
                     <div >
@@ -114,25 +112,27 @@ if(!isMobile()){
 
                 <div class="col-12 hide" id="report-resume">
                     <div class="row">
-                    <div class="col-4">
-                        <div class="box">
-                            
+                    <div class="col-4 col-m-12 mr-b-10">
+                        <div class="box card card-shadow pd-15 text-center">
+                            <small class="text-muted">Total Sales</small>
+                            <h3 id="resume-total-sales" style="margin:5px 0;">0</h3>
                         </div>
                     </div>
-                    <div class="col-4">
-                        <div class="box">
-                            
+                    <div class="col-4 col-m-12 mr-b-10">
+                        <div class="box card card-shadow pd-15 text-center">
+                            <small class="text-muted">Total Vouchers</small>
+                            <h3 id="resume-total-vcr" style="margin:5px 0;">0</h3>
                         </div>
                     </div>
-                    <div class="col-4">
-                        <div class="box">
-                            
+                    <div class="col-4 col-m-12 mr-b-10">
+                        <div class="box card card-shadow pd-15 text-center">
+                            <small class="text-muted">Average / Day</small>
+                            <h3 id="resume-avg-sales" style="margin:5px 0;">0</h3>
                         </div>
                     </div>    
-                    <div class="col-12" id="container"></div>
+                    <div class="col-12" id="container" style="min-height: 400px; margin-top: 15px;"></div>
                     </div>
-                    
-            </div>
+                </div>
             </div>
             </div>
             <div class="card-footer"><span id="loading"></span> </div>
@@ -162,14 +162,12 @@ if(!isMobile()){
             
             <div class="mr-t-10">
             <div class="row">
-                <!-- <div class="col-12 mr-b-10">
+                <div class="col-12 mr-b-10">
                     <div class="btn-group">
-                        <button class="bg-btn-group" onclick="loadSReport()" id="btn-selling-report"><i class="fa fa-list" ></i> Report</button> 
-                        <button class="bg-btn-group" onclick="loadReoprResume()" id="btn-report-resume"><i class="fa fa-chars" ></i> Resume</button>
-                        
+                        <button class="bg-btn-group active" onclick="showReportTab()" id="btn-selling-report-m"><i class="fa fa-list" ></i> Report</button> 
+                        <button class="bg-btn-group" onclick="loadReportResume()" id="btn-report-resume-m"><i class="fa fa-area-chart" ></i> Resume</button>
                     </div>
-                    
-                </div> -->
+                </div>
                 
                 <div class="col-12 hide" id="selling-report">
                     <div class="">
@@ -244,6 +242,30 @@ if(!isMobile()){
                     </table>
                     </div>
                 </div>
+
+                <div class="col-12 hide" id="report-resume-m">
+                    <div class="row">
+                    <div class="col-12 mr-b-10">
+                        <div class="box card card-shadow pd-15 text-center">
+                            <small class="text-muted">Total Sales</small>
+                            <h3 id="resume-total-sales-m" style="margin:5px 0;">0</h3>
+                        </div>
+                    </div>
+                    <div class="col-12 mr-b-10">
+                        <div class="box card card-shadow pd-15 text-center">
+                            <small class="text-muted">Total Vouchers</small>
+                            <h3 id="resume-total-vcr-m" style="margin:5px 0;">0</h3>
+                        </div>
+                    </div>
+                    <div class="col-12 mr-b-10">
+                        <div class="box card card-shadow pd-15 text-center">
+                            <small class="text-muted">Average / Day</small>
+                            <h3 id="resume-avg-sales-m" style="margin:5px 0;">0</h3>
+                        </div>
+                    </div>    
+                    <div class="col-12" id="container-m" style="min-height: 350px; margin-top: 15px;"></div>
+                    </div>
+                </div>
             </div>
             </div>
             <div class="card-footer"><span id="loading"></span> </div>
@@ -288,7 +310,8 @@ setTimeout(function(){
 })
 
 </script>
-
+<script src="assets/js/highcharts/highcharts.js"></script>
+<script src="assets/js/highcharts/highcharts.theme.js"></script>
 
 <?php
 include_once("view/footer_html.php");
