@@ -3,6 +3,8 @@
 session_start();
 // hide all error
 error_reporting(0);
+include_once(__DIR__ . "/../core/timezone.php");
+date_default_timezone_set(mikhmon_valid_timezone(isset($_SESSION["timezone"]) ? $_SESSION["timezone"] : ""));
 // protect .php
 $get_self = explode("/",$_SERVER['PHP_SELF']);
 $self[] = $get_self[count($get_self)-1];
@@ -10,7 +12,6 @@ $self[] = $get_self[count($get_self)-1];
 if($self[0] !== "index.php"  && $self[0] !==""){
     include_once("../core/route.php");
 }else{
-include_once("../core/func.php");
 $day = $_GET['day'];
 $force = $_GET['f'];
 $sessR = $m_user."report".$day;

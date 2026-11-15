@@ -5,6 +5,7 @@ session_start();
 error_reporting(0);
 include_once("../core/page_route.php");
 include_once("../core/no_cache.php");
+include_once(__DIR__ . "/../core/mikhmon_scripts.php");
 
 
 
@@ -47,34 +48,18 @@ if(isset($_POST['name']) && isset($_SESSION["mikhmon"])){
          
         $parent = ($_POST['parentqueue']);
         
+        $mode = "";
         if ($expmode == "ntf" || $expmode == "ntfc") {
           $mode = "N";
         }else if ($expmode == "rem" || $expmode == "remc") {
           $mode = "X";
         }
         
-        $record = '; :local mac $"mac-address"; :local time [/system clock get time ]; /system script add name="$date-|-$time-|-$user-|-'.$price.'-|-$address-|-$mac-|-' . $validity . '-|-'.$name.'-|-$comment" owner="$month$year" source=$date comment=mikhmon';
+        // Report scripts store the legacy date as source and nov2026 as owner,
+        // regardless of whether the router reports dates in v6 or v7 format.
+        $record = '; :local mac $"mac-address"; :local time [/system clock get time ]; :local sname "$legacy-|-$time-|-$user-|-'.$price.'-|-$address-|-$mac-|-' . $validity . '-|-'.$name.'-|-$comment"; /system script add name=$sname owner="$monthname$year" source=$legacy comment=mikhmon; /system script set [find name=$sname] owner="$monthname$year"';
         
-        $onlogin = ':put (",'.$expmode.',' . $price . ',' . $validity . ','.$sprice.',,' . $getlock . ',' . $srvlock . ',"); :local mode "'.$mode.'"; {:local date [ /system clock get date ];:local year [ :pick $date 7 11 ];:local month [ :pick $date 0 3 ];:local comment [ /ip hotspot user get [/ip hotspot user find where name="$user"] comment]; :local ucode [:pic $comment 0 2]; :if ($ucode = "vc" or $ucode = "up" or $comment = "") do={ /sys sch add name="$user" disable=no start-date=$date interval="' . $validity . '"; :delay 2s; :local exp [ /sys sch get [ /sys sch find where name="$user" ] next-run]; :local getxp [len $exp]; :if ($getxp = 15) do={ :local d [:pic $exp 0 6]; :local t [:pic $exp 7 16]; :local s ("/"); :local exp ("$d$s$year $t"); /ip hotspot user set comment="$exp $mode" [find where name="$user"];}; :if ($getxp = 8) do={ /ip hotspot user set comment="$date $exp $mode" [find where name="$user"];}; :if ($getxp > 15) do={ /ip hotspot user set comment="$exp $mode" [find where name="$user"];}; /sys sch remove [find where name="$user"]';
-        
-    
-        if ($expmode == "rem") {
-          $onlogin = $onlogin . $lock . $slock ."}}";
-          $mode = "remove";
-        } elseif ($expmode == "ntf") {
-          $onlogin = $onlogin . $lock . $slock ."}}";
-          $mode = "set limit-uptime=1s";
-        } elseif ($expmode == "remc") {
-          $onlogin = $onlogin . $record . $lock . $slock ."}}";
-          $mode = "remove";
-        } elseif ($expmode == "ntfc") {
-          $onlogin = $onlogin . $record . $lock . $slock ."}}";
-          $mode = "set limit-uptime=1s";
-        } elseif ($expmode == "0" && $price != "") {
-          $onlogin = ':put (",,' . $price . ',,'.$sprice.',noexp,' . $getlock . ','.$srvlock.',")' . $lock . $slock;
-        } else {
-          $onlogin = "";
-        }
+        $onlogin = mikhmon_onlogin_script($expmode, $price, $validity, $sprice, $getlock, $srvlock, $mode, $record, $lock, $slock);
 
 	
     // routeros api

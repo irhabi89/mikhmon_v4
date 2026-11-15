@@ -3,6 +3,7 @@
 session_start();
 // hide all error
 error_reporting(0);
+include_once(__DIR__ . "/../core/timezone.php");
 // protect .php
 $get_self = explode("/",$_SERVER['PHP_SELF']);
 $self[] = $get_self[count($get_self)-1];
@@ -10,13 +11,17 @@ $self[] = $get_self[count($get_self)-1];
 if($self[0] !== "index.php"  && $self[0] !==""){
     include_once("../core/route.php");
 }else{
-date_default_timezone_set($_SESSION["timezone"]);
+date_default_timezone_set(mikhmon_valid_timezone(isset($_SESSION["timezone"]) ? $_SESSION["timezone"] : ""));
 $comment = $_GET['c'];
 $uid = $_GET['uid'];
 $prev = $_GET['prev'];
 $d = $_GET['d'];
 $s = $_GET['s'];
 $t = $_GET['t'];
+// Default to the full-size template when no template parameter is supplied.
+$header = 'template/header.default.txt';
+$row = 'template/row.default.txt';
+$footer = 'template/footer.default.txt';
 if(isset($d)){
     $header = 'template/header.default.txt';
     $row = 'template/row.default.txt';

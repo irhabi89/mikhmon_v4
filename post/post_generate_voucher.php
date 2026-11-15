@@ -102,15 +102,20 @@ if (isset($_POST['qty']) && isset($_SESSION["mikhmon"])) {
 		}
 
 		for ($i = 1; $i <= $qty; $i++) {
-			$API->comm("/ip/hotspot/user/add", array(
+			$u_data = array(
 				"server" => "$server",
 				"name" => "$u[$i]",
 				"password" => "$p[$i]",
 				"profile" => "$profile",
-				"limit-uptime" => "$timelimit",
-				"limit-bytes-total" => "$datalimit",
 				"comment" => "$commt",
-			));
+			);
+			if (!empty($timelimit)) {
+				$u_data["limit-uptime"] = "$timelimit";
+			}
+			if (!empty($datalimit)) {
+				$u_data["limit-bytes-total"] = "$datalimit";
+			}
+			$API->comm("/ip/hotspot/user/add", $u_data);
 		}
 	}
 
@@ -172,15 +177,20 @@ if (isset($_POST['qty']) && isset($_SESSION["mikhmon"])) {
 
 		// tambahkan ke hotspot
 		for ($i = 1; $i <= $qty; $i++) {
-			$API->comm("/ip/hotspot/user/add", array(
+			$u_data = array(
 				"server" => "$server",
 				"name" => "$u[$i]",
 				"password" => "$u[$i]",
 				"profile" => "$profile",
-				"limit-uptime" => "$timelimit",
-				"limit-bytes-total" => "$datalimit",
 				"comment" => "$commt",
-			));
+			);
+			if (!empty($timelimit)) {
+				$u_data["limit-uptime"] = "$timelimit";
+			}
+			if (!empty($datalimit)) {
+				$u_data["limit-bytes-total"] = "$datalimit";
+			}
+			$API->comm("/ip/hotspot/user/add", $u_data);
 		}
 	}
 

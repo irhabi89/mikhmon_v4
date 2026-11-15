@@ -42,17 +42,24 @@ if(isset($_POST['name']) && isset($_SESSION["mikhmon"])){
 
     $API->connect($iphost, $userhost, dec_rypt($passwdhost));
  
-	$add = $API->comm("/ip/hotspot/user/add", array(
+	$user_data = array(
 	  "server" => "$server",
       "name" => "$name",
       "password" => "$password",
       "profile" => "$profile",
-      "mac-address" => "$mac_addr",
       "disabled" => "no",
-      "limit-uptime" => "$timelimit",
-      "limit-bytes-total" => "$datalimit",
       "comment" => "$comment",
-    ));
+    );
+    if (!empty($mac_addr)) {
+        $user_data["mac-address"] = "$mac_addr";
+    }
+    if (!empty($timelimit)) {
+        $user_data["limit-uptime"] = "$timelimit";
+    }
+    if (!empty($datalimit)) {
+        $user_data["limit-bytes-total"] = "$datalimit";
+    }
+	$add = $API->comm("/ip/hotspot/user/add", $user_data);
 
 	
 	
