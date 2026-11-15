@@ -40,10 +40,13 @@ if($m_user != "admin" && !isMobile()){
   </div>
   <a href="?<?= $m_user ?>" class="sidenav_item <?= $dash_ma ?>" ><i class="fa fa-th-large"></i> Dashboard</a>
   <a href="?<?= $m_user ?>/hotspot" class="sidenav_item <?= $hotspot_ma ?>"><i class="fa fa-wifi"></i> Hotspot</a>
-  <!-- <a href="#" class="sidenav_item <?= $voucher_ma ?>" ><i class="fa fa-ticket"></i> Voucher</a>
-  <a href="#" class="sidenav_item <?= $quickprint_ma ?>" ><i class="fa fa-print"></i> Quick Print</a> -->
+  <a href="?<?= $m_user ?>/quick_print" class="sidenav_item <?= $quickprint_ma ?>" ><i class="fa fa-print"></i> Quick Print</a>
+  <a href="?<?= $m_user ?>/vouchers" class="sidenav_item <?= $voucher_ma ?>" ><i class="fa fa-ticket"></i> Vouchers</a>
+  <a href="?<?= $m_user ?>/dhcp" class="sidenav_item <?= $dhcp_ma ?>" ><i class="fa fa-sitemap"></i> DHCP Leases</a>
+  <a href="?<?= $m_user ?>/traffic" class="sidenav_item <?= $traffic_ma ?>" ><i class="fa fa-area-chart"></i> Traffic Monitor</a>
   <a href="?<?= $m_user ?>/log" class="sidenav_item <?= $log_ma ?>" ><i class="fa fa-file-text"></i> Log</a>
   <a href="?<?= $m_user ?>/report" class="sidenav_item <?= $report_ma ?>" ><i class="fa fa-money"></i> Report</a>
+  <a href="?<?= $m_user ?>/system" class="sidenav_item <?= $system_ma ?>" ><i class="fa fa-server"></i> System</a>
   <a href="?admin/settings/&r=<?= $m_user ?>" class="sidenav_item <?= $settings_ma ?>" ><i class="fa fa-gear"></i> Settings</a>
   
   <a class="sidenav_item" title="Idle Timeout">
@@ -102,10 +105,13 @@ if($m_user != "admin" && !isMobile()){
  
   <a href="?<?= $m_user ?>" class="<?= $dash_ma ?>" ><i class="fa fa-th-large"></i> Dashboard</a>
   <a href="?<?= $m_user ?>/hotspot" class="<?= $hotspot_ma ?>"><i class="fa fa-wifi"></i> Hotspot</a>
-  <!-- <a href="#" class="<?= $voucher_ma ?>" ><i class="fa fa-ticket"></i> Voucher</a>
-  <a  class="<?= $quickprint_ma ?>" ><i class="fa fa-print"></i> Quick Print</a> -->
+  <a href="?<?= $m_user ?>/quick_print" class="<?= $quickprint_ma ?>" ><i class="fa fa-print"></i> Quick Print</a>
+  <a href="?<?= $m_user ?>/vouchers" class="<?= $voucher_ma ?>" ><i class="fa fa-ticket"></i> Vouchers</a>
+  <a href="?<?= $m_user ?>/dhcp" class="<?= $dhcp_ma ?>" ><i class="fa fa-sitemap"></i> DHCP Leases</a>
+  <a href="?<?= $m_user ?>/traffic" class="<?= $traffic_ma ?>" ><i class="fa fa-area-chart"></i> Traffic Monitor</a>
   <a href="?<?= $m_user ?>/log" class="<?= $log_ma ?>" ><i class="fa fa-file-text"></i> Log</a>
   <a href="?<?= $m_user ?>/report" class="<?= $report_ma ?>" ><i class="fa fa-money"></i> Report</a>
+  <a href="?<?= $m_user ?>/system" class="<?= $system_ma ?>" ><i class="fa fa-server"></i> System</a>
   <a href="?admin/settings/&r=<?= $m_user ?>" class="<?= $settings_ma ?>" ><i class="fa fa-gear"></i> Settings</a>
   <a  id="statconn" class="" title="Idle Timeout">
     <i style="font-size: 16px" class="fa fa-hourglass-half mr-1"></i>

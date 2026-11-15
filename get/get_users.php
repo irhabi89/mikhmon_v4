@@ -26,7 +26,11 @@ $x = "#";
     }else if($force == "true" || !isset($_SESSION["$m_user.$uprof"]) || empty($_SESSION["$m_user.$uprof"])){
         include_once("config/connection.php");
 
-            $get_users = $API->comm("/ip/hotspot/user/print", array("?profile" => "$uprof"));
+            if (empty($uprof) || $uprof == "all") {
+                $get_users = $API->comm("/ip/hotspot/user/print");
+            } else {
+                $get_users = $API->comm("/ip/hotspot/user/print", array("?profile" => "$uprof"));
+            }
             
             $json_data = json_encode($get_users);
 

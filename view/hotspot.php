@@ -29,6 +29,10 @@ if ($self[0] !== "index.php"  && $self[0] !== "") {
                                     class="fa fa-wifi"></i> Active</span>
                             <span class="card-tab" onclick="loadHotspotHosts()" id="btn-hotspot-hosts"><i
                                     class="fa fa-laptop"></i> Hosts</span>
+                            <span class="card-tab" onclick="loadIPBinding()" id="btn-hotspot-binding"><i
+                                    class="fa fa-address-book"></i> IP Binding</span>
+                            <span class="card-tab" onclick="loadHotspotCookies()" id="btn-hotspot-cookies"><i
+                                    class="fa fa-cutlery"></i> Cookies</span>
                         </div>
                         <div class="card-body">
                             <div class="row">
@@ -132,6 +136,10 @@ if ($self[0] !== "index.php"  && $self[0] !== "") {
                                                 class='bg-btn-group pointer hide'><i class="fa fa-print"></i> Small</button>
                                             <button id='printVcr' title='Print with default template'
                                                 class='bg-btn-group pointer hide'><i class="fa fa-print"></i> Default</button>
+                                            <button onclick="exportToCSV('hotspot-users-'+session.replace('?','')+'.csv','users')" title='Export to CSV'
+                                                class='bg-btn-group pointer'><i class="fa fa-file-excel-o"></i> CSV</button>
+                                            <button onclick="exportUsersRSC()" title='Export MikroTik Script (.rsc)'
+                                                class='bg-btn-group pointer'><i class="fa fa-download"></i> RSC</button>
 
                                         </div>
 
@@ -282,6 +290,94 @@ if ($self[0] !== "index.php"  && $self[0] !== "") {
                                         </table>
                                     </div>
                                 </div>
+                                <div class="col-12 hide" id="hotspot-binding">
+                                    <div class="">
+                                        <div class="btn-group btn-container">
+                                            <button class="bg-btn-group table-total" id="total-binding">&nbsp;</button>
+                                            <button class="bg-btn-group" onclick="loadIPBinding()" title="Force reload"><i
+                                                    class="fa fa-refresh" id="fr-binding"></i></button>
+                                            <input type="text" autocomplete="off" id="filter-binding"
+                                                onkeyup="filterTable('binding','searchBinding',this.value)" placeholder="Filter" />
+                                            <button class="bg-btn-group" onclick="filterTable('binding','filter-binding','')"
+                                                title="Clear filter"><i class="fa fa-filter"></i></button>
+                                        </div>
+                                        <div class="btn-group btn-container">
+                                            <button class="bg-btn-group" onclick="openAddBindingModal()"><i class="fa fa-plus"></i> Add Binding</button>
+                                        </div>
+                                        <div class="btn-group btn-container">
+                                            <button class="bg-btn-group" onclick="filterTable('binding','searchBinding','bypassed')"
+                                                title="Filter bypassed">Bypassed</button>
+                                            <button class="bg-btn-group" onclick="filterTable('binding','searchBinding','blocked')"
+                                                title="Filter blocked">Blocked</button>
+                                            <button class="bg-btn-group" onclick="filterTable('binding','searchBinding','regular')"
+                                                title="Filter regular">Regular</button>
+                                        </div>
+                                    </div>
+                                    <div class="card-fixed mr-t-10">
+                                        <table class="table table-bordered table-hover hotspot-binding">
+                                            <thead>
+                                                <tr>
+                                                    <th></th>
+                                                    <th>MAC Address</th>
+                                                    <th>Address</th>
+                                                    <th>To Address</th>
+                                                    <th>Server</th>
+                                                    <th>Type</th>
+                                                    <th>Comment</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="binding" class="text-nowrap">
+                                                <tr>
+                                                    <td></td>
+                                                    <td></td>
+                                                    <td></td>
+                                                    <td></td>
+                                                    <td></td>
+                                                    <td></td>
+                                                    <td></td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                                <div class="col-12 hide" id="hotspot-cookies">
+                                    <div class="">
+                                        <div class="btn-group btn-container">
+                                            <button class="bg-btn-group table-total" id="total-cookies">&nbsp;</button>
+                                            <button class="bg-btn-group" onclick="loadHotspotCookies()" title="Force reload"><i
+                                                    class="fa fa-refresh" id="fr-cookies"></i></button>
+                                            <input type="text" autocomplete="off" id="filter-cookies"
+                                                onkeyup="filterTable('cookies','searchCookies',this.value)" placeholder="Filter" />
+                                            <button class="bg-btn-group" onclick="filterTable('cookies','filter-cookies','')"
+                                                title="Clear filter"><i class="fa fa-filter"></i></button>
+                                        </div>
+                                        <div class="btn-group btn-container">
+                                            <button class="bg-btn-group btn-danger" onclick="clearAllCookies()"><i class="fa fa-trash"></i> Clear All Cookies</button>
+                                        </div>
+                                    </div>
+                                    <div class="card-fixed mr-t-10">
+                                        <table class="table table-bordered table-hover hotspot-cookies">
+                                            <thead>
+                                                <tr>
+                                                    <th></th>
+                                                    <th>User</th>
+                                                    <th>MAC Address</th>
+                                                    <th>Domain</th>
+                                                    <th>Expires In</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="cookies" class="text-nowrap">
+                                                <tr>
+                                                    <td></td>
+                                                    <td></td>
+                                                    <td></td>
+                                                    <td></td>
+                                                    <td></td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         <div class="card-footer"><span id="loading"></span> </div>
@@ -333,6 +429,8 @@ if ($self[0] !== "index.php"  && $self[0] !== "") {
                                         <a id="btn-user-profiles"><i class="fa fa-pie-chart"></i> User Profile</a>
                                         <a id="btn-hotspot-active"><i class="fa fa-wifi"></i> Active</a>
                                         <a id="btn-hotspot-hosts"><i class="fa fa-laptop"></i> Hosts</a>
+                                        <a id="btn-hotspot-binding" onclick="loadIPBinding()"><i class="fa fa-address-book"></i> IP Binding</a>
+                                        <a id="btn-hotspot-cookies" onclick="loadHotspotCookies()"><i class="fa fa-cutlery"></i> Cookies</a>
                                     </div>
                                 </div>
                             </div>
@@ -410,6 +508,10 @@ if ($self[0] !== "index.php"  && $self[0] !== "") {
                                             <button id='printVcr' title='Print with default template'
                                                 class='btn-mobile bg-btn-group pointer hide'><i class="fa fa-print"></i>
                                                 Default</button>
+                                            <button onclick="exportToCSV('hotspot-users-'+session.replace('?','')+'.csv','users')" title='Export to CSV'
+                                                class='btn-mobile bg-btn-group pointer'><i class="fa fa-file-excel-o"></i> CSV</button>
+                                            <button onclick="exportUsersRSC()" title='Export MikroTik Script (.rsc)'
+                                                class='btn-mobile bg-btn-group pointer'><i class="fa fa-download"></i> RSC</button>
 
 
                                         </div>
@@ -499,6 +601,56 @@ if ($self[0] !== "index.php"  && $self[0] !== "") {
                                         <hr>
                                         <table class="table-p0  hotspot-hosts">
                                             <tbody id="hosts" class="text-nowrap">
+                                                <tr>
+                                                    <td></td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                                <div class="col-12 hide" id="hotspot-binding">
+                                    <div class="">
+                                        <div class="btn-group">
+                                            <button class="btn-mobile bg-btn-group table-total" id="total-binding">&nbsp;</button>
+                                            <button class="btn-mobile bg-btn-group" onclick="loadIPBinding()"
+                                                title="Force reload"><i class="fa fa-refresh" id="fr-binding"></i></button>
+                                            <input type="text" autocomplete="off" id="filter-binding"
+                                                onkeyup="filterTable('binding','searchBinding',this.value)" placeholder="Filter" />
+                                            <button class="btn-mobile bg-btn-group"
+                                                onclick="filterTable('binding','filter-binding','')" title="Clear filter"><i
+                                                    class="fa fa-filter"></i></button>
+                                            <button class="btn-mobile bg-btn-group" onclick="openAddBindingModal()"><i class="fa fa-plus"></i> Add</button>
+                                        </div>
+                                    </div>
+                                    <div class="card-fixed mr-t-10">
+                                        <hr>
+                                        <table class="table-p0 hotspot-binding">
+                                            <tbody id="binding" class="text-nowrap">
+                                                <tr>
+                                                    <td></td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                                <div class="col-12 hide" id="hotspot-cookies">
+                                    <div class="">
+                                        <div class="btn-group">
+                                            <button class="btn-mobile bg-btn-group table-total" id="total-cookies">&nbsp;</button>
+                                            <button class="btn-mobile bg-btn-group" onclick="loadHotspotCookies()"
+                                                title="Force reload"><i class="fa fa-refresh" id="fr-cookies"></i></button>
+                                            <input type="text" autocomplete="off" id="filter-cookies"
+                                                onkeyup="filterTable('cookies','searchCookies',this.value)" placeholder="Filter" />
+                                            <button class="btn-mobile bg-btn-group"
+                                                onclick="filterTable('cookies','filter-cookies','')" title="Clear filter"><i
+                                                    class="fa fa-filter"></i></button>
+                                            <button class="btn-mobile bg-btn-group btn-danger" onclick="clearAllCookies()"><i class="fa fa-trash"></i> Clear</button>
+                                        </div>
+                                    </div>
+                                    <div class="card-fixed mr-t-10">
+                                        <hr>
+                                        <table class="table-p0 hotspot-cookies">
+                                            <tbody id="cookies" class="text-nowrap">
                                                 <tr>
                                                     <td></td>
                                                 </tr>
@@ -889,6 +1041,56 @@ if ($self[0] !== "index.php"  && $self[0] !== "") {
         </div>
     </div>
 
+    <div id="modal_add_binding" class="modal unselect">
+        <div class="modal-content<?= $modal_mobile; ?>">
+            <span id="closeAddBinding" class="close" onclick="$('#modal_add_binding').hide()"><i class="fa fa-times"></i></span>
+            <div class="modal-header<?= $modal_mobile; ?>">
+                <span><i class="fa fa-address-book"></i>&nbsp; <b>Add IP Binding</b></span>
+            </div>
+            <div class="modal-body<?= $modal_mobile; ?>">
+                <table class="table">
+                    <tr>
+                        <td>MAC Address</td>
+                        <td><input id="binding_mac" placeholder="AA:BB:CC:DD:EE:FF" autocomplete="off" class="form-control" type="text" /></td>
+                    </tr>
+                    <tr>
+                        <td>Address</td>
+                        <td><input id="binding_addr" placeholder="10.10.x.x" autocomplete="off" class="form-control" type="text" /></td>
+                    </tr>
+                    <tr>
+                        <td>To Address</td>
+                        <td><input id="binding_toaddr" placeholder="10.10.x.x (optional)" autocomplete="off" class="form-control" type="text" /></td>
+                    </tr>
+                    <tr>
+                        <td>Server</td>
+                        <td>
+                            <select class="form-control" id="binding_server">
+                                <option value="all">all</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>Type</td>
+                        <td>
+                            <select class="form-control" id="binding_type">
+                                <option value="bypassed" selected>bypassed</option>
+                                <option value="blocked">blocked</option>
+                                <option value="regular">regular</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>Comment</td>
+                        <td><input id="binding_comment" placeholder="Comment" autocomplete="off" class="form-control" type="text" /></td>
+                    </tr>
+                </table>
+            </div>
+            <div class="modal-footer<?= $modal_mobile; ?>">
+                <button class="btn bg-primary" style="float:right;" onclick="saveIPBinding()"><i class="fa fa-save"></i> Save</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         $(document).ready(function() {
             // $("#user-profiles").removeClass('hide').addClass('block');
@@ -904,6 +1106,27 @@ if ($self[0] !== "index.php"  && $self[0] !== "") {
             setTimeout(function() {
                 $("#btn-hotspot-users").trigger("click");
             }, 100);
+
+            $("#btn-hotspot-users, #btn-user-profiles, #btn-hotspot-active, #btn-hotspot-hosts").on("click", function() {
+                menuNonActive("hotspot-binding");
+                menuNonActive("hotspot-cookies");
+            });
+
+            var viewProf = localStorage.getItem(session + '_view_prof');
+            if (viewProf) {
+                localStorage.removeItem(session + '_view_prof');
+                setTimeout(function() {
+                    $("#select-profile").val(viewProf).trigger("change");
+                }, 600);
+            }
+            var genProf = localStorage.getItem(session + '_gen_prof');
+            if (genProf) {
+                localStorage.removeItem(session + '_gen_prof');
+                setTimeout(function() {
+                    $("#gen_usrprofile").val(genProf);
+                    $(".btn-gen-hotspot-users").first().trigger("click");
+                }, 600);
+            }
 
 
 
@@ -934,6 +1157,22 @@ if ($self[0] !== "index.php"  && $self[0] !== "") {
             $(".hotspot-hosts").fancyTable({
                 inputId: "searchHosts",
                 sortColumn: 2,
+                pagination: true,
+                perPage: 15,
+                globalSearch: true,
+            });
+
+            $(".hotspot-binding").fancyTable({
+                inputId: "searchBinding",
+                sortColumn: 1,
+                pagination: true,
+                perPage: 15,
+                globalSearch: true,
+            });
+
+            $(".hotspot-cookies").fancyTable({
+                inputId: "searchCookies",
+                sortColumn: 1,
                 pagination: true,
                 perPage: 15,
                 globalSearch: true,

@@ -35,10 +35,11 @@ if($self[0] !== "index.php"  && $self[0] !==""){
 
     "get_nat" => "get/get_nat.php",
     "connect" => "get/get_connect.php",
-  
-
-    
-    
+    "get_ip_binding" => "get/get_ip_binding.php",
+    "get_cookies" => "get/get_cookies.php",
+    "get_dhcp_leases" => "get/get_dhcp_leases.php",
+    "get_schedulers" => "get/get_schedulers.php",
+    "get_quick_print" => "get/get_quick_print.php",
 
     //view
     "dashboard" => "view/dashboard.php",
@@ -48,6 +49,12 @@ if($self[0] !== "index.php"  && $self[0] !==""){
     "s_report" => "view/report_all.php",
     "live_report" => "view/live_report.php",
     "hotspot" => "view/hotspot.php",
+    "quick_print" => "view/quick_print.php",
+    "vouchers" => "view/vouchers.php",
+    "voucher" => "view/vouchers.php",
+    "dhcp" => "view/dhcp.php",
+    "traffic" => "view/traffic.php",
+    "system" => "view/system.php",
     "log" => "view/log.php",
     "report" => "view/report.php",
     "print" => "view/print_voucher.php",

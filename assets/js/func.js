@@ -1694,3 +1694,1027 @@ $("#btn-tsave").click(function () {
   $(".editor_help").click(function () {
     window.open("https://laksa19.github.io/?mikhmon/v4/voucher");
   });
+
+// ==========================================
+// Mikhmon v4 - Ported v3 Features & Actions
+// ==========================================
+
+function safeJesDec(data) {
+  try {
+    var dec = jesD.dec(data);
+    if (dec.charAt(0) === '[') return JSON.parse(dec);
+    var firstBracket = dec.indexOf('[');
+    var lastBracket = dec.lastIndexOf(']');
+    if (firstBracket !== -1 && lastBracket !== -1) {
+      return JSON.parse(dec.substring(firstBracket, lastBracket + 1));
+    }
+    return JSON.parse(dec);
+  } catch (err) {
+    console.error("jesD parse error:", err);
+    return [];
+  }
+}
+
+// ------------------------------------------
+// 1. IP Binding
+// ------------------------------------------
+function loadIPBinding(force) {
+  menuActive("hotspot-binding");
+  menuNonActive("hotspot-users");
+  menuNonActive("user-profiles");
+  menuNonActive("hotspot-active");
+  menuNonActive("hotspot-hosts");
+  menuNonActive("hotspot-cookies");
+  if (isMobile()) {
+    $("#pload").html($("#btn-hotspot-binding").html());
+  }
+  getIPBinding(force);
+}
+
+function getIPBinding(force) {
+  $("#binding").fadeOut(200).html("");
+  $("#loading").html("Loading IP Binding...");
+  $.get(session + "/get_ip_binding", function (data) {
+    var list = safeJesDec(data);
+    var count = 0;
+    $("#binding").html("");
+    if (Array.isArray(list)) {
+      count = list.length;
+      $.each(list, function (idx, b) {
+        var id = b[".id"] || "";
+        var mac = b["mac-address"] || "";
+        var addr = b.address || "";
+        var toAddr = b["to-address"] || "";
+        var server = b.server || "all";
+        var type = b.type || "regular";
+        var comment = b.comment || "";
+        var disabled = b.disabled === "true";
+
+        var typeBadge = '<span class="badge" style="background:#607d8b;color:#fff;padding:2px 6px;border-radius:3px;">' + type + '</span>';
+        if (type === "bypassed") {
+          typeBadge = '<span class="badge" style="background:#4caf50;color:#fff;padding:2px 6px;border-radius:3px;">Bypassed</span>';
+        } else if (type === "blocked") {
+          typeBadge = '<span class="badge" style="background:#f44336;color:#fff;padding:2px 6px;border-radius:3px;">Blocked</span>';
+        }
+
+        var toggleBtn = disabled
+          ? '<span class="text-warning pointer" title="Enable Binding" onclick="toggleIPBinding(\'' + id + '\',\'true\')"><i class="fa fa-lock"></i></span>'
+          : '<span class="text-green pointer" title="Disable Binding" onclick="toggleIPBinding(\'' + id + '\',\'false\')"><i class="fa fa-unlock"></i></span>';
+
+        var removeBtn = '<span class="text-danger pointer" title="Remove Binding" onclick="removeIPBinding(\'' + id + '\',\'' + mac + '\')"><i class="fa fa-minus-square"></i></span>';
+
+        if (isMobile()) {
+          var mobHtml = '<tr class="yes"><td><div class="box-mobile">'
+            + '<b>Status:</b> ' + (disabled ? '<span class="text-danger">Disabled</span>' : '<span class="text-success">Enabled</span>') + '<br>'
+            + '<b>Type:</b> ' + typeBadge + '<br>'
+            + '<b>MAC:</b> ' + mac + '<br>'
+            + '<b>Address:</b> ' + addr + '<br>'
+            + '<b>To Address:</b> ' + toAddr + '<br>'
+            + '<b>Server:</b> ' + server + '<br>'
+            + '<b>Comment:</b> ' + comment + '<br>'
+            + '<div class="mr-t-5">' + removeBtn + '&nbsp;&nbsp;' + toggleBtn + '</div>'
+            + '</div></td></tr>';
+          $("#binding").append(mobHtml);
+        } else {
+          var row = '<tr class="yes">'
+            + '<td style="text-align:center;">' + removeBtn + '&nbsp;&nbsp;' + toggleBtn + '</td>'
+            + '<td>' + mac + '</td>'
+            + '<td>' + addr + '</td>'
+            + '<td>' + toAddr + '</td>'
+            + '<td>' + server + '</td>'
+            + '<td>' + typeBadge + '</td>'
+            + '<td>' + comment + '</td>'
+            + '</tr>';
+          $("#binding").append(row);
+        }
+      });
+    }
+    $("#binding").fadeIn(200);
+    $("#total-binding").html(count + " Item" + (count > 1 ? "s" : ""));
+    $("#loading").html("");
+    $(".hotspot-binding").fancyTable({
+      inputId: "searchBinding",
+      sortColumn: 1,
+      pagination: true,
+      perPage: 15,
+      globalSearch: true
+    });
+  });
+}
+
+function openAddBindingModal(mac, ip) {
+  $("#binding_mac").val(mac || "");
+  $("#binding_addr").val(ip || "");
+  $("#binding_toaddr").val("");
+  $("#binding_type").val("bypassed");
+  $("#binding_comment").val("");
+  if ($("#binding_server option").length <= 1) {
+    $.get(session + "/get_hotspot_server", function (data) {
+      var srvs = safeJesDec(data);
+      if (Array.isArray(srvs)) {
+        $("#binding_server").html('<option value="all">all</option>');
+        $.each(srvs, function (i, s) {
+          $("#binding_server").append('<option value="' + s.name + '">' + s.name + '</option>');
+        });
+      }
+    });
+  }
+  $("#modal_add_binding").show();
+}
+
+function saveIPBinding() {
+  var mac = $("#binding_mac").val().trim();
+  var addr = $("#binding_addr").val().trim();
+  var toAddr = $("#binding_toaddr").val().trim();
+  var srv = $("#binding_server").val();
+  var type = $("#binding_type").val();
+  var comm = $("#binding_comment").val().trim();
+
+  if (!mac && !addr) {
+    alert("Please enter at least MAC Address or IP Address!");
+    return;
+  }
+
+  $.ajax({
+    type: "POST",
+    url: "./post/post_ip_binding.php",
+    data: {
+      sessname: session,
+      action: "add",
+      mac: mac,
+      address: addr,
+      to_address: toAddr,
+      server: srv,
+      type: type,
+      comment: comm
+    },
+    dataType: "json",
+    success: function (res) {
+      if (res.message === "success") {
+        $("#modal_add_binding").hide();
+        loadIPBinding();
+      } else {
+        alert("Failed to add IP Binding: " + (res.message || "Unknown error"));
+      }
+    }
+  });
+}
+
+function toggleIPBinding(id, disabled) {
+  var nextState = disabled === "true" ? "no" : "yes";
+  $.ajax({
+    type: "POST",
+    url: "./post/post_ip_binding.php",
+    data: {
+      sessname: session,
+      action: "toggle",
+      id: id,
+      disabled: nextState
+    },
+    dataType: "json",
+    success: function (res) {
+      if (res.message === "success") {
+        loadIPBinding();
+      } else {
+        alert("Failed to update IP Binding");
+      }
+    }
+  });
+}
+
+function removeIPBinding(id, mac) {
+  if (confirm("Are you sure you want to remove IP Binding (" + (mac || id) + ")?")) {
+    $.ajax({
+      type: "POST",
+      url: "./post/post_hotspot_remove.php",
+      data: {
+        sessname: session,
+        where: "binding_",
+        id: id
+      },
+      dataType: "json",
+      success: function (res) {
+        if (res.message === "success") {
+          loadIPBinding();
+        } else {
+          location.reload();
+        }
+      }
+    });
+  }
+}
+
+// ------------------------------------------
+// 2. Hotspot Cookies
+// ------------------------------------------
+function loadHotspotCookies() {
+  menuActive("hotspot-cookies");
+  menuNonActive("hotspot-users");
+  menuNonActive("user-profiles");
+  menuNonActive("hotspot-active");
+  menuNonActive("hotspot-hosts");
+  menuNonActive("hotspot-binding");
+  if (isMobile()) {
+    $("#pload").html($("#btn-hotspot-cookies").html());
+  }
+  getHotspotCookies();
+}
+
+function getHotspotCookies() {
+  $("#cookies").fadeOut(200).html("");
+  $("#loading").html("Loading Cookies...");
+  $.get(session + "/get_cookies", function (data) {
+    var list = safeJesDec(data);
+    var count = 0;
+    $("#cookies").html("");
+    if (Array.isArray(list)) {
+      count = list.length;
+      $.each(list, function (idx, c) {
+        var id = c[".id"] || "";
+        var user = c.user || "";
+        var mac = c["mac-address"] || "";
+        var domain = c.domain || "";
+        var exp = c["expires-in"] ? timeNice(c["expires-in"]) : "";
+        var removeBtn = '<span class="text-danger pointer" title="Remove Cookie" onclick="removeCookie(\'' + id + '\',\'' + user + '\')"><i class="fa fa-minus-square"></i></span>';
+
+        if (isMobile()) {
+          var mobHtml = '<tr class="yes"><td><div class="box-mobile">'
+            + '<b>User:</b> ' + user + '<br>'
+            + '<b>MAC:</b> ' + mac + '<br>'
+            + '<b>Domain:</b> ' + domain + '<br>'
+            + '<b>Expires In:</b> ' + exp + '<br>'
+            + '<div class="mr-t-5">' + removeBtn + '</div>'
+            + '</div></td></tr>';
+          $("#cookies").append(mobHtml);
+        } else {
+          var row = '<tr class="yes">'
+            + '<td style="text-align:center;">' + removeBtn + '</td>'
+            + '<td>' + user + '</td>'
+            + '<td>' + mac + '</td>'
+            + '<td>' + domain + '</td>'
+            + '<td>' + exp + '</td>'
+            + '</tr>';
+          $("#cookies").append(row);
+        }
+      });
+    }
+    $("#cookies").fadeIn(200);
+    $("#total-cookies").html(count + " Item" + (count > 1 ? "s" : ""));
+    $("#loading").html("");
+    $(".hotspot-cookies").fancyTable({
+      inputId: "searchCookies",
+      sortColumn: 1,
+      pagination: true,
+      perPage: 15,
+      globalSearch: true
+    });
+  });
+}
+
+function removeCookie(id, user) {
+  if (confirm("Are you sure you want to remove cookie for user [" + user + "]?")) {
+    $.ajax({
+      type: "POST",
+      url: "./post/post_hotspot_remove.php",
+      data: {
+        sessname: session,
+        where: "cookie_",
+        id: id
+      },
+      dataType: "json",
+      success: function (res) {
+        if (res.message === "success") {
+          loadHotspotCookies();
+        } else {
+          location.reload();
+        }
+      }
+    });
+  }
+}
+
+function clearAllCookies() {
+  if (confirm("Are you sure you want to clear ALL hotspot cookies?")) {
+    $.ajax({
+      type: "POST",
+      url: "./post/post_hotspot_remove.php",
+      data: {
+        sessname: session,
+        where: "cookie_all",
+        id: "all"
+      },
+      dataType: "json",
+      success: function (res) {
+        if (res.message === "success") {
+          loadHotspotCookies();
+        } else {
+          location.reload();
+        }
+      }
+    });
+  }
+}
+
+// ------------------------------------------
+// 3. DHCP Leases
+// ------------------------------------------
+function loadDHCPLeases() {
+  $("#dhcpleases").fadeOut(200).html("");
+  $("#loading").html("Loading DHCP Leases...");
+  $.get(session + "/get_dhcp_leases", function (data) {
+    var list = safeJesDec(data);
+    var count = 0;
+    $("#dhcpleases").html("");
+    if (Array.isArray(list)) {
+      count = list.length;
+      $.each(list, function (idx, l) {
+        var id = l[".id"] || "";
+        var addr = l.address || "";
+        var mac = l["mac-address"] || "";
+        var server = l.server || "";
+        var activeAddr = l["active-address"] || addr;
+        var activeMac = l["active-mac-address"] || mac;
+        var hostName = l["host-name"] || "";
+        var status = l.status || "";
+        var expires = l["expires-after"] || "";
+        var isDynamic = l.dynamic === "true";
+
+        var typeBadge = isDynamic
+          ? '<b class="text-primary" title="Dynamic">D</b>'
+          : '<b class="text-success" title="Static">S</b>';
+
+        var makeStaticBtn = isDynamic
+          ? '<button class="bg-btn-group pointer" title="Make Static" onclick="makeDHCPStatic(\'' + id + '\',\'' + addr + '\')"><i class="fa fa-thumb-tack"></i></button>'
+          : '';
+
+        var removeBtn = '<button class="bg-btn-group pointer text-danger" title="Remove Lease" onclick="removeDHCPLease(\'' + id + '\',\'' + addr + '\')"><i class="fa fa-minus-square"></i></button>';
+
+        if (isMobile()) {
+          var mobHtml = '<tr class="yes"><td><div class="box-mobile">'
+            + '<b>Type:</b> ' + typeBadge + ' (' + (isDynamic ? 'Dynamic' : 'Static') + ')<br>'
+            + '<b>Address:</b> ' + addr + '<br>'
+            + '<b>MAC:</b> ' + mac + '<br>'
+            + '<b>Server:</b> ' + server + '<br>'
+            + '<b>Host Name:</b> ' + hostName + '<br>'
+            + '<b>Status:</b> ' + status + '<br>'
+            + '<b>Expires After:</b> ' + expires + '<br>'
+            + '<div class="mr-t-5">' + makeStaticBtn + '&nbsp;' + removeBtn + '</div>'
+            + '</div></td></tr>';
+          $("#dhcpleases").append(mobHtml);
+        } else {
+          var row = '<tr class="yes">'
+            + '<td style="text-align:center;">' + makeStaticBtn + '&nbsp;' + removeBtn + '</td>'
+            + '<td style="text-align:center;">' + typeBadge + '</td>'
+            + '<td>' + addr + '</td>'
+            + '<td>' + mac + '</td>'
+            + '<td>' + server + '</td>'
+            + '<td>' + activeAddr + '</td>'
+            + '<td>' + activeMac + '</td>'
+            + '<td>' + hostName + '</td>'
+            + '<td>' + status + '</td>'
+            + '<td>' + expires + '</td>'
+            + '</tr>';
+          $("#dhcpleases").append(row);
+        }
+      });
+    }
+    $("#dhcpleases").fadeIn(200);
+    $("#total-dhcpleases").html(count + " Item" + (count > 1 ? "s" : ""));
+    $("#loading").html("");
+    $(".dhcp-leases").fancyTable({
+      inputId: "searchDHCPLeases",
+      sortColumn: 2,
+      pagination: true,
+      perPage: 15,
+      globalSearch: true
+    });
+  });
+}
+
+function makeDHCPStatic(id, ip) {
+  if (confirm("Make DHCP lease static for IP [" + ip + "]?")) {
+    $.ajax({
+      type: "POST",
+      url: "./post/post_dhcp_lease.php",
+      data: {
+        sessname: session,
+        action: "make_static",
+        id: id
+      },
+      dataType: "json",
+      success: function (res) {
+        if (res.message === "success") {
+          loadDHCPLeases();
+        } else {
+          alert("Failed to make static: " + (res.message || "Error"));
+        }
+      }
+    });
+  }
+}
+
+function removeDHCPLease(id, ip) {
+  if (confirm("Are you sure you want to remove DHCP lease [" + ip + "]?")) {
+    $.ajax({
+      type: "POST",
+      url: "./post/post_dhcp_lease.php",
+      data: {
+        sessname: session,
+        action: "remove",
+        id: id
+      },
+      dataType: "json",
+      success: function (res) {
+        if (res.message === "success") {
+          loadDHCPLeases();
+        } else {
+          alert("Failed to remove lease");
+        }
+      }
+    });
+  }
+}
+
+// ------------------------------------------
+// 4. Quick Print
+// ------------------------------------------
+var cachedPresets = [];
+var qpColors = ['bg-blue', 'bg-green', 'bg-purple', 'bg-indigo', 'bg-teal', 'bg-pink', 'bg-cyan', 'bg-yellow'];
+
+function loadQuickPrint() {
+  $("#quick-print-container").html("<div class='col-12 text-center'><i class='fa fa-circle-o-notch fa-spin'></i> Loading Quick Print Presets...</div>");
+  $("#loading").html("Loading Quick Print...");
+  $.get(session + "/get_quick_print", function (data) {
+    var presets = safeJesDec(data);
+    cachedPresets = presets;
+    $("#quick-print-container").html("");
+    if (!Array.isArray(presets) || presets.length === 0) {
+      $("#quick-print-container").html(
+        '<div class="col-12 text-center mr-t-20">'
+        + '<p>Belum ada preset Quick Print. Buat preset paket baru untuk cetak 1-klik yang praktis!</p>'
+        + '<button class="btn bg-primary" onclick="openAddPresetModal()"><i class="fa fa-plus"></i> Buat Preset Sekarang</button>'
+        + '</div>'
+      );
+      $("#loading").html("");
+      return;
+    }
+
+    $.each(presets, function (idx, p) {
+      var colorClass = qpColors[idx % qpColors.length];
+      var prText = (currency || "Rp") + " " + Number(p.price || 0).toLocaleString();
+      var sprText = (currency || "Rp") + " " + Number(p.sprice || p.price || 0).toLocaleString();
+
+      var cardHtml = '<div class="col-4 mr-b-15">'
+        + '<div class="box bmh-75 box-bordered ' + colorClass + '" style="border-radius:6px;position:relative;cursor:pointer;">'
+        + '<div style="position:absolute;top:8px;right:8px;z-index:10;">'
+        + '<span class="pointer text-white" title="Edit Preset" onclick="event.stopPropagation();editQuickPreset(\'' + p.id + '\')"><i class="fa fa-edit"></i></span>&nbsp;&nbsp;'
+        + '<span class="pointer text-white" title="Delete Preset" onclick="event.stopPropagation();deleteQuickPreset(\'' + p.id + '\',\'' + p.package + '\')"><i class="fa fa-trash"></i></span>'
+        + '</div>'
+        + '<div class="box-group" onclick="executeQuickPrint(\'' + p.id + '\')">'
+        + '<div class="box-group-icon"><i class="fa fa-print"></i></div>'
+        + '<div class="box-group-area">'
+        + '<h3 style="margin-top:0;">' + p.package + '</h3>'
+        + '<span><b>Profile:</b> ' + p.profile + '<br>'
+        + '<b>Validity:</b> ' + (p.validity || '-') + ' | <b>Time:</b> ' + (p.timelimit || '-') + '<br>'
+        + '<b>Data Limit:</b> ' + (p.datalimit || '-') + '<br>'
+        + '<b>Price:</b> ' + prText + ' | <b>Selling:</b> ' + sprText + '</span>'
+        + '</div>'
+        + '</div>'
+        + '</div>'
+        + '</div>';
+      $("#quick-print-container").append(cardHtml);
+    });
+    $("#loading").html("");
+  });
+}
+
+function openAddPresetModal(p) {
+  $("#qp_id").val(p ? p.id : "");
+  $("#qp_modal_title").text(p ? "Edit Preset Package" : "Add Preset Package");
+  $("#qp_package").val(p ? p.package : "");
+  $("#qp_prefix").val(p ? p.prefix : "");
+  $("#qp_char").val(p ? p.char : "mix");
+  $("#qp_timelimit").val(p ? p.timelimit : "");
+  $("#qp_datalimit").val(p ? p.datalimit : "");
+  $("#qp_validity").val(p ? p.validity : "");
+  $("#qp_price").val(p ? p.price : "0");
+  $("#qp_sprice").val(p ? p.sprice : "0");
+  $("#qp_comment").val(p ? p.comment : "");
+  $("#qp_usrmode").val(p ? p.usermode : "vc");
+  $("#qp_userlength").val(p ? p.userlength : "4");
+
+  if ($("#qp_server option").length <= 1) {
+    $.get(session + "/get_hotspot_server", function (data) {
+      var srvs = safeJesDec(data);
+      if (Array.isArray(srvs)) {
+        $("#qp_server").html('<option value="all">all</option>');
+        $.each(srvs, function (i, s) {
+          $("#qp_server").append('<option value="' + s.name + '">' + s.name + '</option>');
+        });
+        if (p && p.server) $("#qp_server").val(p.server);
+      }
+    });
+  } else if (p && p.server) {
+    $("#qp_server").val(p.server);
+  }
+
+  if ($("#qp_profile option").length === 0) {
+    $.get(session + "/profiles", function (data) {
+      var profs = safeJesDec(data);
+      if (Array.isArray(profs)) {
+        $("#qp_profile").html("");
+        $.each(profs, function (i, pr) {
+          $("#qp_profile").append('<option value="' + pr.name + '">' + pr.name + '</option>');
+        });
+        if (p && p.profile) $("#qp_profile").val(p.profile);
+      }
+    });
+  } else if (p && p.profile) {
+    $("#qp_profile").val(p.profile);
+  }
+
+  $("#modal_quick_preset").show();
+}
+
+function editQuickPreset(id) {
+  var p = cachedPresets.find(function (item) { return item.id === id; });
+  if (p) {
+    openAddPresetModal(p);
+  }
+}
+
+function saveQuickPreset() {
+  var id = $("#qp_id").val();
+  var pkg = $("#qp_package").val().trim();
+  if (!pkg) {
+    alert("Please enter package name!");
+    return;
+  }
+  var srv = $("#qp_server").val();
+  var prof = $("#qp_profile").val();
+  var usrmode = $("#qp_usrmode").val();
+  var userl = $("#qp_userlength").val();
+  var pfx = $("#qp_prefix").val().trim();
+  var char = $("#qp_char").val();
+  var timelimit = $("#qp_timelimit").val().trim();
+  var datalimit = $("#qp_datalimit").val().trim();
+  var validity = $("#qp_validity").val().trim();
+  var price = $("#qp_price").val().trim();
+  var sprice = $("#qp_sprice").val().trim();
+  var comm = $("#qp_comment").val().trim();
+
+  $.ajax({
+    type: "POST",
+    url: "./post/post_quick_print.php",
+    data: {
+      sessname: session,
+      action: "save_preset",
+      id: id,
+      package: pkg,
+      server: srv,
+      profile: prof,
+      usermode: usrmode,
+      userlength: userl,
+      prefix: pfx,
+      char: char,
+      timelimit: timelimit,
+      datalimit: datalimit,
+      validity: validity,
+      price: price,
+      sprice: sprice,
+      comment: comm,
+      userlock: "Disable"
+    },
+    dataType: "json",
+    success: function (res) {
+      if (res.message === "success") {
+        $("#modal_quick_preset").hide();
+        loadQuickPrint();
+      } else {
+        alert("Failed to save preset: " + (res.message || "Error"));
+      }
+    }
+  });
+}
+
+function deleteQuickPreset(id, name) {
+  if (confirm("Are you sure you want to delete preset [" + name + "]?")) {
+    $.ajax({
+      type: "POST",
+      url: "./post/post_quick_print.php",
+      data: {
+        sessname: session,
+        action: "delete_preset",
+        id: id
+      },
+      dataType: "json",
+      success: function (res) {
+        if (res.message === "success") {
+          loadQuickPrint();
+        } else {
+          alert("Failed to delete preset");
+        }
+      }
+    });
+  }
+}
+
+function executeQuickPrint(id) {
+  var p = cachedPresets.find(function (item) { return item.id === id; });
+  if (!p) return;
+  if (!confirm("Print 1 voucher for package [" + p.package + "]?")) return;
+
+  var gencode = makeid(4);
+  $("#loading").html("Generating quick voucher for " + p.package + "...");
+
+  $.ajax({
+    type: "POST",
+    url: "./post/post_generate_voucher.php",
+    data: {
+      sessname: session,
+      qty: 1,
+      server: p.server || "all",
+      user: p.usermode || "vc",
+      userl: p.userlength || "4",
+      prefix: p.prefix || "",
+      char: p.char || "mix",
+      profile: p.profile || "default",
+      timelimit: p.timelimit || "",
+      datalimit: p.datalimit || "",
+      gcomment: p.comment || "",
+      gencode: gencode
+    },
+    dataType: "json",
+    success: function (res) {
+      $("#loading").html("");
+      if (res.message === "success") {
+        var comm = p.usermode + "-" + gencode + "-" + res.data.date + "-" + (p.comment || "");
+        var printUrl = session + "/print&vcr=" + encodeURIComponent(comm) + "&prof=" + encodeURIComponent(p.profile) + "&mode=s";
+        window.open(printUrl, "_blank");
+      } else {
+        alert("Failed to generate voucher: " + (res.data ? res.data.error : res.message));
+      }
+    },
+    error: function () {
+      $("#loading").html("");
+      alert("Error contacting server while generating voucher.");
+    }
+  });
+}
+
+// ------------------------------------------
+// 5. Vouchers (User by Profile)
+// ------------------------------------------
+function loadVouchersGrid() {
+  $("#vouchers-container").html("<div class='col-12 text-center'><i class='fa fa-circle-o-notch fa-spin'></i> Loading Vouchers by Profile...</div>");
+  $("#loading").html("Loading Vouchers...");
+
+  $.when(
+    $.get(session + "/profiles"),
+    $.get(session + "/users")
+  ).done(function (pData, uData) {
+    var profs = safeJesDec(pData[0]);
+    var users = safeJesDec(uData[0]);
+    $("#vouchers-container").html("");
+
+    var totalUsers = Array.isArray(users) ? users.length : 0;
+    var profileCounts = {};
+    if (Array.isArray(users)) {
+      $.each(users, function (i, u) {
+        var pr = u.profile || "default";
+        profileCounts[pr] = (profileCounts[pr] || 0) + 1;
+      });
+    }
+
+    // Card 1: All Vouchers
+    var allCard = '<div class="col-4 mr-b-15">'
+      + '<div class="box bmh-75 box-bordered bg-blue" style="border-radius:6px;">'
+      + '<div class="box-group">'
+      + '<div class="box-group-icon"><i class="fa fa-ticket"></i></div>'
+      + '<div class="box-group-area">'
+      + '<h3 style="margin-top:0;">Profile: All</h3>'
+      + '<span>Total: <b>' + totalUsers + '</b> User' + (totalUsers > 1 ? 's' : '') + '</span><br>'
+      + '<div class="mr-t-10">'
+      + '<a href="' + session + '/hotspot" class="btn bg-btn-group" style="padding:4px 8px;font-size:12px;"><i class="fa fa-external-link"></i> View All</a>'
+      + '</div>'
+      + '</div>'
+      + '</div>'
+      + '</div>'
+      + '</div>';
+    $("#vouchers-container").append(allCard);
+
+    // Profile cards
+    if (Array.isArray(profs)) {
+      $.each(profs, function (idx, pr) {
+        var pName = pr.name;
+        var pCount = profileCounts[pName] || 0;
+        var colorClass = qpColors[(idx + 1) % qpColors.length];
+        var sUser = pr["shared-users"] || "1";
+        var rLimit = pr["rate-limit"] || "unlimited";
+
+        var card = '<div class="col-4 mr-b-15">'
+          + '<div class="box bmh-75 box-bordered ' + colorClass + '" style="border-radius:6px;">'
+          + '<div class="box-group">'
+          + '<div class="box-group-icon"><i class="fa fa-ticket"></i></div>'
+          + '<div class="box-group-area">'
+          + '<h3 style="margin-top:0;">Profile: ' + pName + '</h3>'
+          + '<span>Users: <b>' + pCount + '</b> | Shared: ' + sUser + '<br>'
+          + 'Rate: ' + rLimit + '</span><br>'
+          + '<div class="mr-t-10">'
+          + '<a href="' + session + '/hotspot" onclick="localStorage.setItem(\'' + session + '_view_prof\',\'' + pName + '\')" class="btn bg-btn-group" style="padding:4px 8px;font-size:12px;"><i class="fa fa-users"></i> View Users</a>&nbsp;'
+          + '<button onclick="openGenerateForProfile(\'' + pName + '\')" class="btn bg-btn-group" style="padding:4px 8px;font-size:12px;"><i class="fa fa-ticket"></i> Generate</button>'
+          + '</div>'
+          + '</div>'
+          + '</div>'
+          + '</div>'
+          + '</div>';
+        $("#vouchers-container").append(card);
+      });
+    }
+    $("#loading").html("");
+  }).fail(function () {
+    $("#loading").html("");
+    $("#vouchers-container").html("<div class='col-12 text-center text-danger'>Failed to load profiles and users.</div>");
+  });
+}
+
+function openGenerateForProfile(profName) {
+  localStorage.setItem(session + "_gen_prof", profName || "");
+  window.location.href = session + "/hotspot";
+}
+
+// ------------------------------------------
+// 6. Traffic Monitor (Full Page)
+// ------------------------------------------
+var fullTrafficChart = null;
+var fullTrafficTimer = null;
+
+function initTrafficPage() {
+  $("#loading").html("Loading interfaces...");
+  $.get(session + "/get_interface", function (data) {
+    var ifaces = safeJesDec(data);
+    $("#traffic_iface_select").html('<option value="">-- Select Interface --</option>');
+    if (Array.isArray(ifaces)) {
+      $.each(ifaces, function (i, ifc) {
+        var nm = ifc.name;
+        $("#traffic_iface_select").append('<option value="' + nm + '">' + nm + ' (' + (ifc.type || 'ether') + ')</option>');
+      });
+      if (ifaces.length > 0) {
+        var first = ifaces[0].name;
+        $("#traffic_iface_select").val(first);
+        startTrafficMonitor(first);
+      }
+    }
+    $("#loading").html("");
+  });
+
+  $("#traffic_iface_select").on("change", function () {
+    var val = $(this).val();
+    if (val) {
+      startTrafficMonitor(val);
+    } else {
+      if (fullTrafficTimer) clearInterval(fullTrafficTimer);
+    }
+  });
+}
+
+function startTrafficMonitor(iface) {
+  if (fullTrafficTimer) clearInterval(fullTrafficTimer);
+
+  fullTrafficChart = new Highcharts.Chart({
+    chart: {
+      renderTo: "fullTrafficChart",
+      animation: Highcharts.svg,
+      type: "areaspline",
+      events: {
+        load: function () {}
+      }
+    },
+    title: { text: "Real-time Traffic: " + iface },
+    xAxis: {
+      type: "datetime",
+      tickPixelInterval: 150,
+      maxZoom: 20 * 1000
+    },
+    yAxis: {
+      minPadding: 0.2,
+      maxPadding: 0.2,
+      title: { text: "Bandwidth (bps)", margin: 10 }
+    },
+    series: [
+      { name: "TX (Upload)", data: [] },
+      { name: "RX (Download)", data: [] }
+    ]
+  });
+
+  function poll() {
+    $.ajax({
+      url: session + "/get_traffic&iface=" + encodeURIComponent(iface),
+      dataType: "json",
+      success: function (data) {
+        if (data && fullTrafficChart && fullTrafficChart.series && fullTrafficChart.series.length >= 2) {
+          var tx = parseInt(data.tx) || 0;
+          var rx = parseInt(data.rx) || 0;
+          var x = new Date().getTime();
+          var shift = fullTrafficChart.series[0].data.length > 25;
+
+          fullTrafficChart.series[0].addPoint([x, tx], true, shift);
+          fullTrafficChart.series[1].addPoint([x, rx], true, shift);
+
+          $("#live_tx_rate").html(formatBytes(tx) + "ps");
+          $("#live_rx_rate").html(formatBytes(rx) + "ps");
+        }
+      }
+    });
+  }
+
+  poll();
+  fullTrafficTimer = setInterval(poll, 2000);
+}
+
+// ------------------------------------------
+// 7. System Tools (Scheduler, Reboot, Shutdown)
+// ------------------------------------------
+function switchSystemTab(tab) {
+  if (tab === "schedulers") {
+    $("#panel-schedulers").removeClass("hide").show();
+    $("#panel-power").hide();
+    $("#btn-tab-schedulers").addClass("card-tab-active");
+    $("#btn-tab-power").removeClass("card-tab-active");
+  } else {
+    $("#panel-schedulers").hide();
+    $("#panel-power").removeClass("hide").show();
+    $("#btn-tab-power").addClass("card-tab-active");
+    $("#btn-tab-schedulers").removeClass("card-tab-active");
+  }
+}
+
+function loadSchedulers() {
+  $("#schedulers").fadeOut(200).html("");
+  $("#loading").html("Loading Schedulers...");
+  $.get(session + "/get_schedulers", function (data) {
+    var list = safeJesDec(data);
+    var count = 0;
+    $("#schedulers").html("");
+    if (Array.isArray(list)) {
+      count = list.length;
+      $.each(list, function (idx, s) {
+        var id = s[".id"] || "";
+        var name = s.name || "";
+        var startD = s["start-date"] || "";
+        var startT = s["start-time"] || "";
+        var interval = s.interval || "";
+        var nextRun = s["next-run"] || "";
+        var runCount = s["run-count"] || "0";
+        var comment = s.comment || "";
+        var disabled = s.disabled === "true";
+
+        var toggleBtn = disabled
+          ? '<span class="text-warning pointer" title="Enable Scheduler" onclick="toggleScheduler(\'' + id + '\',\'true\')"><i class="fa fa-lock"></i></span>'
+          : '<span class="text-green pointer" title="Disable Scheduler" onclick="toggleScheduler(\'' + id + '\',\'false\')"><i class="fa fa-unlock"></i></span>';
+
+        var removeBtn = '<span class="text-danger pointer" title="Remove Scheduler" onclick="removeScheduler(\'' + id + '\',\'' + name + '\')"><i class="fa fa-minus-square"></i></span>';
+
+        if (isMobile()) {
+          var mobHtml = '<tr class="yes"><td><div class="box-mobile">'
+            + '<b>Name:</b> ' + name + '<br>'
+            + '<b>Status:</b> ' + (disabled ? '<span class="text-danger">Disabled</span>' : '<span class="text-success">Active</span>') + '<br>'
+            + '<b>Interval:</b> ' + interval + ' | <b>Next Run:</b> ' + nextRun + '<br>'
+            + '<b>Runs:</b> ' + runCount + '<br>'
+            + '<b>Comment:</b> ' + comment + '<br>'
+            + '<div class="mr-t-5">' + removeBtn + '&nbsp;&nbsp;' + toggleBtn + '</div>'
+            + '</div></td></tr>';
+          $("#schedulers").append(mobHtml);
+        } else {
+          var row = '<tr class="yes">'
+            + '<td style="text-align:center;">' + removeBtn + '&nbsp;&nbsp;' + toggleBtn + '</td>'
+            + '<td>' + name + '</td>'
+            + '<td>' + startD + '</td>'
+            + '<td>' + startT + '</td>'
+            + '<td>' + interval + '</td>'
+            + '<td>' + nextRun + '</td>'
+            + '<td>' + runCount + '</td>'
+            + '<td>' + comment + '</td>'
+            + '</tr>';
+          $("#schedulers").append(row);
+        }
+      });
+    }
+    $("#schedulers").fadeIn(200);
+    $("#total-schedulers").html(count + " Item" + (count > 1 ? "s" : ""));
+    $("#loading").html("");
+    $(".system-schedulers").fancyTable({
+      inputId: "searchSchedulers",
+      sortColumn: 1,
+      pagination: true,
+      perPage: 15,
+      globalSearch: true
+    });
+  });
+}
+
+function toggleScheduler(id, disabled) {
+  var nextState = disabled === "true" ? "no" : "yes";
+  $.ajax({
+    type: "POST",
+    url: "./post/post_scheduler.php",
+    data: {
+      sessname: session,
+      action: "toggle",
+      id: id,
+      disabled: nextState
+    },
+    dataType: "json",
+    success: function (res) {
+      if (res.message === "success") {
+        loadSchedulers();
+      } else {
+        alert("Failed to toggle scheduler");
+      }
+    }
+  });
+}
+
+function removeScheduler(id, name) {
+  if (confirm("Are you sure you want to remove scheduler [" + name + "]?")) {
+    $.ajax({
+      type: "POST",
+      url: "./post/post_scheduler.php",
+      data: {
+        sessname: session,
+        action: "remove",
+        id: id
+      },
+      dataType: "json",
+      success: function (res) {
+        if (res.message === "success") {
+          loadSchedulers();
+        } else {
+          alert("Failed to remove scheduler");
+        }
+      }
+    });
+  }
+}
+
+function confirmRouterPower(action) {
+  var actTitle = action === "reboot" ? "REBOOT" : "SHUTDOWN";
+  var promptMsg = "PERINGATAN: Apakah Anda yakin ingin melakukan " + actTitle + " pada router MikroTik?";
+  if (confirm(promptMsg)) {
+    if (confirm("Konfirmasi Terakhir: Router akan segera di-" + action + ". Lanjutkan?")) {
+      $("#loading").html("Executing " + action + "...");
+      $.ajax({
+        type: "POST",
+        url: "./post/post_router_power.php",
+        data: {
+          sessname: session,
+          action: action
+        },
+        dataType: "json",
+        success: function (res) {
+          alert("Perintah " + actTitle + " berhasil dikirimkan ke router.");
+          window.location.href = session;
+        },
+        error: function () {
+          alert("Perintah " + actTitle + " telah dikirim. Router sedang memulai proses.");
+          window.location.href = session;
+        }
+      });
+    }
+  }
+}
+
+// ------------------------------------------
+// 8. Export Users to RouterOS RSC Script
+// ------------------------------------------
+function exportUsersRSC() {
+  var rows = $("#users tr.yes");
+  if (rows.length === 0) {
+    alert("No users to export!");
+    return;
+  }
+  var rsc = "# Generated by MIKHMON v4\n# Exported Hotspot Users\n/ip hotspot user\n";
+  for (var i = 0; i < rows.length; i++) {
+    var cells = rows[i].querySelectorAll("td");
+    if (cells.length >= 6) {
+      var server = cells[1].innerText.trim() || "all";
+      var name = cells[2].innerText.trim();
+      var profile = cells[3].innerText.trim();
+      var comment = cells[7] ? cells[7].innerText.trim() : "";
+      if (name) {
+        rsc += 'add server="' + server + '" name="' + name + '" profile="' + profile + '"';
+        if (comment) rsc += ' comment="' + comment + '"';
+        rsc += "\n";
+      }
+    }
+  }
+  var filename = "hotspot-users-" + session.replace("?", "") + ".rsc";
+  var blob = new Blob([rsc], { type: "text/plain;charset=utf-8" });
+  var a = document.createElement("a");
+  a.download = filename;
+  a.href = window.URL.createObjectURL(blob);
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+}
+

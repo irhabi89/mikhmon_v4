@@ -40,6 +40,30 @@ if(isset($_POST['sessname']) && isset($_SESSION["mikhmon"])){
     }else  if($where == "host_"){
         $API->comm("/ip/hotspot/host/remove", array(
             ".id" => $id,));	
+    }else  if($where == "binding_"){
+        $API->comm("/ip/hotspot/ip-binding/remove", array(
+            ".id" => $id,));
+    }else  if($where == "cookie_"){
+        $API->comm("/ip/hotspot/cookie/remove", array(
+            ".id" => $id,));
+    }else  if($where == "cookie_all"){
+        $all_cookies = $API->comm("/ip/hotspot/cookie/print");
+        if (is_array($all_cookies)) {
+            foreach ($all_cookies as $c) {
+                if (isset($c['.id'])) {
+                    $API->comm("/ip/hotspot/cookie/remove", array(".id" => $c['.id']));
+                }
+            }
+        }
+    }else  if($where == "dhcp_lease_"){
+        $API->comm("/ip/dhcp-server/lease/remove", array(
+            ".id" => $id,));
+    }else  if($where == "scheduler_"){
+        $API->comm("/system/scheduler/remove", array(
+            ".id" => $id,));
+    }else  if($where == "quick_print_"){
+        $API->comm("/system/script/remove", array(
+            ".id" => $id,));
     }
 
     $mess = array(
