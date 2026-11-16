@@ -1,230 +1,204 @@
 <?php
 /*
  *  Copyright (C) 2018 Laksamadi Guko.
- *  MIKHMON v4 - Hotspot Voucher Check Page
+ *
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-session_start();
+
 // hide all error
 error_reporting(0);
+ob_start("ob_gzhandler");
 
-$session = $_GET['session'] ?? '';
+$session = $_GET['session'];
+include_once('../lib/routeros_api.class.php');
+include('../lib/formatbytesbites.php');
+include('../include/config.php');
 
-include_once(__DIR__ . '/../config/config.php');
-include_once(__DIR__ . '/../core/routeros_api.class.php');
-include_once(__DIR__ . '/../core/format_bytes.php');
+// theme  
+include('../include/theme.php');
 
-$sessions = array();
-foreach ($data as $k => $v) {
-    if ($k !== 'mikhmon' && !empty($k)) {
-        $sessions[] = $k;
-    }
+include_once('../include/timezone.php');
+if (!empty($_SESSION['timezone'])) {
+	date_default_timezone_set(mikhmon_valid_timezone($_SESSION['timezone']));
 }
 
-if (empty($session) && !empty($sessions)) {
-    $session = $sessions[0];
+$iphost = isset($data[$session][1]) ? explode('!', $data[$session][1])[1] : '';
+$userhost = isset($data[$session][2]) ? explode('@|@', $data[$session][2])[1] : '';
+$passwdhost = isset($data[$session][3]) ? explode('#|#', $data[$session][3])[1] : '';
+$hotspotname = isset($data[$session][4]) ? explode('%', $data[$session][4])[1] : '';
+$dnsname = isset($data[$session][5]) ? explode('^', $data[$session][5])[1] : '';
+$currency = isset($data[$session][6]) ? explode('&', $data[$session][6])[1] : '';
+
+$cekindo['indo'] = array('RP', 'Rp', 'rp', 'IDR', 'idr', 'RP.', 'Rp.', 'rp.', 'IDR.', 'idr.', );
+
+$API = new RouterosAPI();
+$API->debug = false;
+if ($currency == in_array($currency, $cekindo['indo'])) {
+	$title = array("Status Voucher", "User/Kode Voucher", "Paket", "Lama Terhubung", "Pemakaian Data", "Sisa Data", "Masa Aktif", "Dari", "Sampai", "tidak terdaftar.", "sudah kadaluarsa.", "Tanggal", "Cek Status", " Hari", " Jam", "Aktif", "Expired");
+} else {
+	$title = array("Voucher Status", "User/Voucher Code", "Profile", "Uptime", "Data Usage", "Data Remaining", "Validity", "Start", "End", "not registered.", "expired.", "Date", "Check Status", " Day", " Hour", "Active", "Expired");
 }
-
-$hotspotname = "Hotspot";
-$currency = "";
-
-if (isset($data[$session])) {
-    $iphost = explode('!', $data[$session][1])[1];
-    $userhost = explode('@|@', $data[$session][2])[1];
-    $passwdhost = explode('#|#', $data[$session][3])[1];
-    $hotspotname = explode('%', $data[$session][4])[1] ?? 'Hotspot';
-    $dnsname = explode('^', $data[$session][5])[1] ?? '';
-    $currency = explode('&', $data[$session][6])[1] ?? '';
-}
-
-$user_data = null;
-$searched = false;
-$error_msg = "";
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['nama'])) {
-    $searched = true;
-    $name = trim($_POST['nama']);
-
-    if (isset($data[$session])) {
-        $API = new RouterosAPI();
-        $API->debug = false;
-
-        if ($API->connect($iphost, $userhost, dec_rypt($passwdhost))) {
-            $getuser = $API->comm("/ip/hotspot/user/print", array("?name" => "$name"));
-            if (!empty($getuser[0])) {
-                $user_data = $getuser[0];
-                $profile_name = $user_data['profile'] ?? '';
-                $getprof = $API->comm("/ip/hotspot/user/profile/print", array("?name" => "$profile_name"));
-                if (!empty($getprof[0])) {
-                    $user_data['profile_data'] = $getprof[0];
-                }
-            } else {
-                $error_msg = "Voucher / username [" . htmlspecialchars($name) . "] not found.";
-            }
-        } else {
-            $error_msg = "Could not connect to router.";
-        }
-    }
+if ($currency == in_array($currency, $cekindo['indo'])) {
+	$s = "";
+} else {
+	$s = "s";
 }
 ?>
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Voucher Status - <?= htmlspecialchars($hotspotname); ?></title>
-    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="stylesheet" href="../assets/css/font-awesome.min.css">
-    <link rel="stylesheet" href="../assets/css/mikhmon-ui.light.min.css">
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            background: #f0f2f5;
-            margin: 0;
-            padding: 20px;
-        }
-        .status-card {
-            max-width: 440px;
-            margin: 20px auto;
-            background: #fff;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-            overflow: hidden;
-        }
-        .status-header {
-            background: #20a8d8;
-            color: #fff;
-            padding: 20px;
-            text-align: center;
-        }
-        .status-header h2 { margin: 0 0 5px 0; font-size: 20px; }
-        .status-body { padding: 20px; }
-        .form-group { margin-bottom: 15px; }
-        .form-control {
-            width: 100%;
-            padding: 10px 12px;
-            border: 1px solid #ced4da;
-            border-radius: 4px;
-            font-size: 15px;
-            box-sizing: border-box;
-        }
-        .btn-check {
-            width: 100%;
-            padding: 10px;
-            background: #20a8d8;
-            color: #fff;
-            border: none;
-            border-radius: 4px;
-            font-size: 16px;
-            font-weight: bold;
-            cursor: pointer;
-        }
-        .btn-check:hover { background: #1b8eb7; }
-        .info-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-        .info-table td { padding: 8px 10px; border-bottom: 1px solid #eee; font-size: 14px; }
-        .info-table td:first-child { font-weight: bold; color: #555; width: 40%; }
-        .badge { padding: 3px 8px; border-radius: 3px; font-size: 12px; font-weight: bold; }
-        .badge-success { background: #4dbd74; color: #fff; }
-        .badge-danger { background: #f86c6b; color: #fff; }
-    </style>
+<title><?= $title[0] . " " . $hotspotname; ?></title>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<meta http-equiv="pragma" content="no-cache" />
+<meta name="viewport" content="width=device-width; initial-scale=1.0; maximum-scale=1.0;"/>
+<!-- Font Awesome -->
+<link rel="stylesheet" type="text/css" href="../css/font-awesome/css/font-awesome.min.css" />
+<!-- Mikhmon UI -->
+<link rel="stylesheet" href="../css/mikhmon-ui.<?= $theme; ?>.min.css">
+<link rel="icon" href="../img/favicon.png" />
+<script>
+function goBack() {
+    window.history.back();
+}
+</script>
+
 </head>
-<body>
-    <div class="status-card">
-        <div class="status-header">
-            <h2><i class="fa fa-ticket"></i> <?= htmlspecialchars($hotspotname); ?></h2>
-            <div>Voucher Status Check</div>
-        </div>
-        <div class="status-body">
-            <form method="post" action="">
-                <?php if (count($sessions) > 1): ?>
-                <div class="form-group">
-                    <select name="session" class="form-control" onchange="window.location.href='?session='+this.value">
-                        <?php foreach ($sessions as $s): ?>
-                        <option value="<?= htmlspecialchars($s); ?>" <?= $s === $session ? 'selected' : ''; ?>>Session: <?= htmlspecialchars(strtoupper($s)); ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                <?php endif; ?>
-                <div class="form-group">
-                    <input type="text" name="nama" class="form-control" placeholder="Enter Voucher Code / Username" value="<?= htmlspecialchars($_POST['nama'] ?? ''); ?>" required autofocus />
-                </div>
-                <button type="submit" class="btn-check"><i class="fa fa-search"></i> Check Status</button>
-            </form>
+<body >
+<div class="login-box" style="padding-top: 10px;">
+<h3 class="text-center">Status Voucher<br><?= $hotspotname; ?></h3>
+<p class="text-center" id="date1"><?= $title[11] . " : " . date("d-m-Y") . "<br>"; ?></p>
+<form autocomplete="off"class="form" method="post" action="">
+	<div class="input-group">
+        <div class="input-group-7">
+			<input type="text" class="group-item group-item-l" name="nama" placeholder="<?= $title[1]; ?>" autofocus required="1" />
+		</div>
+		<div class="input-group-5">
+			<button type="submit" style="cursor: pointer; padding: 2.5px;" class="group-item group-item-r"><i class="fa fa-search"></i> <?= " " . $title[12]; ?></button>
+		</div>
+</div>
+</form>
+<?php
+if (isset($_POST['nama'])) {
+	$name = ($_POST['nama']);
+	if ($API->connect($iphost, $userhost, decrypt($passwdhost))) {
+		$getuser = $API->comm("/ip/hotspot/user/print", array("?name" => "$name"));
+		$user = $getuser[0]['name'];
+		$profile = $getuser[0]['profile'];
+		$exp = $getuser[0]['comment'];
+		$uptime = formatDTM($getuser[0]['uptime']);
+		$getbytein = $getuser[0]['bytes-in'];
+		$getbyteo = $getuser[0]['bytes-out'];
+		$getbytetot = ($getbytein + $getbyteo);
+		$bytetot = formatBytes($getbytetot, 2);
+		$limitup = $getuser[0]['limit-uptime'];
+		$limitbyte = $getuser[0]['limit-bytes-total'];
+		if ($limitbyte == "") {
+			$dataleft = "Unlimited";
+		} elseif ($limitbyte < $getbytetot) {
+			$dataleft = "0 Byte";
+		} else {
+			$dataleft = formatBytes($limitbyte - $getbytetot, 2);
+		}
 
-            <?php if (!empty($error_msg)): ?>
-            <div style="margin-top: 15px; padding: 10px; background: #f8d7da; color: #721c24; border-radius: 4px; font-size: 14px;">
-                <i class="fa fa-exclamation-circle"></i> <?= $error_msg; ?>
-            </div>
-            <?php endif; ?>
+		$getprofile = $API->comm("/ip/hotspot/user/profile/print", array("?name" => "$profile", ));
+		$ponlogin = isset($getprofile[0]['on-login']) ? $getprofile[0]['on-login'] : '';
+		$ponparts = explode(",", $ponlogin);
+		$getvalid = isset($ponparts[3]) ? $ponparts[3] : '';
+		$unit = substr($getvalid, -1);
+		if ($unit == "d") {
+			$getvalid = substr($getvalid, 0, strlen($getvalid) - 1) . " " . $title[13];
+		} elseif ($unit == "h") {
+			$getvalid = substr($getvalid, 0, strlen($getvalid) - 1) . " " . $title[14];
+		}
 
-            <?php if ($user_data): ?>
-            <?php
-                $bytes_in = (float)($user_data['bytes-in'] ?? 0);
-                $bytes_out = (float)($user_data['bytes-out'] ?? 0);
-                $bytes_total = $bytes_in + $bytes_out;
-                $limit_bytes = (float)($user_data['limit-bytes-total'] ?? 0);
-                $uptime = $user_data['uptime'] ?? '0s';
-                $comment = $user_data['comment'] ?? '';
-                $disabled = ($user_data['disabled'] ?? 'false') === 'true';
 
-                $validity = "";
-                if (!empty($user_data['profile_data']['on-login'])) {
-                    $parts = explode(',', $user_data['profile_data']['on-login']);
-                    if (isset($parts[3])) {
-                        $validity = $parts[3];
-                    }
-                }
-            ?>
-            <table class="info-table">
-                <tr>
-                    <td>Status</td>
-                    <td>
-                        <?php if ($disabled): ?>
-                        <span class="badge badge-danger">Disabled</span>
-                        <?php else: ?>
-                        <span class="badge badge-success">Active</span>
-                        <?php endif; ?>
-                    </td>
-                </tr>
-                <tr>
-                    <td>Username</td>
-                    <td><b><?= htmlspecialchars($user_data['name'] ?? ''); ?></b></td>
-                </tr>
-                <tr>
-                    <td>Profile</td>
-                    <td><?= htmlspecialchars($user_data['profile'] ?? '-'); ?></td>
-                </tr>
-                <?php if (!empty($validity)): ?>
-                <tr>
-                    <td>Validity</td>
-                    <td><?= htmlspecialchars($validity); ?></td>
-                </tr>
-                <?php endif; ?>
-                <tr>
-                    <td>Uptime</td>
-                    <td><?= htmlspecialchars($uptime); ?></td>
-                </tr>
-                <tr>
-                    <td>Data Used</td>
-                    <td><?= formatBytes($bytes_total, 2); ?></td>
-                </tr>
-                <?php if ($limit_bytes > 0): ?>
-                <tr>
-                    <td>Data Limit</td>
-                    <td><?= formatBytes($limit_bytes, 2); ?></td>
-                </tr>
-                <tr>
-                    <td>Remaining Data</td>
-                    <td><?= formatBytes(max(0, $limit_bytes - $bytes_total), 2); ?></td>
-                </tr>
-                <?php endif; ?>
-                <?php if (!empty($comment)): ?>
-                <tr>
-                    <td>Expiration / Info</td>
-                    <td><?= htmlspecialchars($comment); ?></td>
-                </tr>
-                <?php endif; ?>
-            </table>
-            <?php endif; ?>
-        </div>
-    </div>
+	}
+  
+	$is_exp_date = (substr($exp, 3, 1) == "/" && substr($exp, 6, 1) == "/") || (substr($exp, 4, 1) == "-" && substr($exp, 7, 1) == "-");
+	if ($user == "" || !$is_exp_date) {
+		echo "<h3 class='text-center'>User <i style='color:#008CCA;'>$name</i> $title[9]</h3>";
+	} elseif ($limitup == "1s" || $uptime == $limitup || $getbyteo == $limitbyte) {
+		echo "<h3 class='text-center'>User <i style='color:#008CCA;'>$name</i> $title[10]</h3>";
+	}
+	if ($user == "" || !$is_exp_date) {
+	} else {
+		?>
+<section>
+<div class="card">
+<div class="card-header">
+    <h3>
+      <i class="fa fa-user mr-1"></i>
+        User Details
+    </h3>
+  </div>
+  <div class="card-body">
+  <?php
+	echo "<div style='overflow-x:auto;'>";
+	echo "<table class='table table-bordered table-hover text-nowrap'>";
+	echo "	<tr>";
+	echo "		<td >$title[1]</td>";
+	echo "		<td > $user</td>";
+	echo "	</tr>";
+	echo "	<tr>";
+	echo "		<td >$title[2]</td>";
+	echo "		<td > $profile</td>";
+	echo "	</tr>";
+	echo "	<tr>";
+	echo "		<td >$title[3]</td>";
+	echo "		<td > $uptime</td>";
+	echo "	</tr>";
+	echo "	<tr>";
+	echo "		<td >$title[4]</td>";
+	echo "		<td > $bytetot</td>";
+	echo "	</tr>";
+	if ($limitup == "1s" || $uptime == $limitup || $getbyteo == $limitbyte) {
+		echo "	<tr>";
+		echo "		<td >Status</td>";
+		echo "		<td >$title[16]</td>";
+		echo "	</tr>";
+		echo "</table>";
+		echo "</div>";
+	} else {
+		echo "	<tr>";
+		echo "		<td >$title[5]</td>";
+		echo "		<td > $dataleft</td>";
+		echo "	</tr>";
+		echo "	<tr>";
+		echo "		<td >$title[6]</td>";
+		echo "		<td >$getvalid</td>";
+		echo "	</tr>";
+				echo "	<tr>";
+		echo "		<td >$title[8]</td>";
+		echo "		<td >$exp</td>";
+		echo "	</tr>";
+		echo "	<tr>";
+		echo "		<td >Status</td>";
+		echo "		<td >$title[15]</td>";
+		echo "	</tr>";
+		echo "</table>";
+		echo "</div>";
+	}
+}
+$API->disconnect();
+
+}
+
+?>
+</div>
+</div>
+</section>
+</div>
+</div>
 </body>
 </html>

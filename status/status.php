@@ -1,89 +1,62 @@
 <?php
 /*
  *  Copyright (C) 2018 Laksamadi Guko.
- *  MIKHMON v4 - Hotspot Voucher Status Endpoint
+ *
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 session_start();
 // hide all error
 error_reporting(0);
+$session = $_GET['session'];
+$uname = $_GET['name'];
 
-$session = $_GET['session'] ?? '';
-$uname = $_GET['name'] ?? '';
+include_once(__DIR__ . '/../include/config.php');
+include_once(__DIR__ . '/../include/readcfg.php');
+$curency = $currency;
 
-if (empty($session) || empty($uname)) {
-    echo "Session and username required";
-    exit;
-}
-
-include_once(__DIR__ . '/../config/config.php');
-include_once(__DIR__ . '/../core/routeros_api.class.php');
-
-if (!isset($data[$session])) {
-    echo "Session not found";
-    exit;
-}
-
-$iphost = explode('!', $data[$session][1])[1];
-$userhost = explode('@|@', $data[$session][2])[1];
-$passwdhost = explode('#|#', $data[$session][3])[1];
-$hotspotname = explode('%', $data[$session][4])[1] ?? 'Hotspot';
-$dnsname = explode('^', $data[$session][5])[1] ?? '';
-$currency = explode('&', $data[$session][6])[1] ?? '';
+include_once(__DIR__ . '/../lib/routeros_api.class.php');
 
 $API = new RouterosAPI();
 $API->debug = false;
+$API->connect( $iphost, $userhost, decrypt($passwdhost));
 
-$exp = '';
-$status = 'unknown';
-
-if ($API->connect($iphost, $userhost, dec_rypt($passwdhost))) {
-    $getname = $API->comm("/ip/hotspot/user/print", array("?name" => "$uname"));
-    if (!empty($getname[0])) {
-        $exp = $getname[0]['comment'] ?? '';
-        if (substr($exp, 3, 1) == "/" && substr($exp, 6, 1) == "/") {
-            // Already formatted as date
-            $status = 'active';
-        } else {
-            $getsch = $API->comm("/system/scheduler/print", array("?name" => "$uname"));
-            if (!empty($getsch[0]['next-run'])) {
-                $exp = $getsch[0]['next-run'];
-                $status = 'active';
-            }
-        }
-    }
-}
-
-if (isset($_GET['format']) && $_GET['format'] === 'json') {
-    header('Content-Type: application/json');
-    echo json_encode(array(
-        "session" => $session,
-        "username" => $uname,
-        "expiration" => $exp,
-        "status" => $status
-    ));
-    exit;
+if($uname != ""){
+	$getname = $API->comm("/ip/hotspot/user/print", array("?name" => "$uname"));
+  	$exp = isset($getname[0]['comment']) ? $getname[0]['comment'] : '';
+	if((substr($exp,3,1) == "/" && substr($exp,6,1) == "/") || (substr($exp,4,1) == "-" && substr($exp,7,1) == "-")){
+		$exp = $exp;
+	}else{
+		$getname = $API->comm("/sys/sch/print", array("?name" => "$uname"));
+		$exp = isset($getname[0]['next-run']) ? $getname[0]['next-run'] : '';
+	}
 }
 ?>
 <!DOCTYPE html>
 <html>
-<head>
-    <title>Voucher - <?= htmlspecialchars($hotspotname . "-" . $uname); ?></title>
-    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
-    <meta http-equiv="pragma" content="no-cache" />
-    <style>
-        body {
-            font-family: 'Helvetica', arial, sans-serif;
-            font-size: 14px;
-            margin: 0;
-            padding: 5px;
-            color: #333;
-        }
-        #exp {
-            font-weight: bold;
-        }
-    </style>
-</head>
-<body>
-    <div id="exp"><?= htmlspecialchars($exp); ?></div>
-</body>
+	<head>
+		<title>Voucher-<?= $hotspotname."-".$uname;?></title>
+		<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+		<meta http-equiv="pragma" content="no-cache" />
+		<style>
+		body {
+  			font-family: 'Helvetica', arial, sans-serif;
+			font-size: 15px;
+			margin:0px;
+  		}
+		</style>
+	</head>
+	<body>
+		<div style="padding:5px;" id="exp" ><?= $exp;?></div>	
+	</body>
 </html>
