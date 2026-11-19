@@ -265,6 +265,58 @@ function mikhmon_import_chunk($session, $batch = 500)
     return $st;
 }
 
+// Delete router sales scripts for a period (month bucket / source date) or all.
+function mikhmon_import_delete_period($session, $source = null, $owner = null)
+{
+    $row = mikhmon_session_get((string)$session);
+    if (!is_array($row)) {
+        return array('ok' => false, 'error' => 'router tidak ada di database');
+    }
+    $API = new RouterosAPI();
+    $API->debug = false;
+    if (!$API->connect($row['ip_host'], $row['user_host'], decrypt($row['pass_host']))) {
+        return array('ok' => false, 'error' => 'gagal terhubung ke Mikrotik');
+    }
+    $deleted = 0;
+    if ($source === null && $owner === null) {
+        $ids = $API->comm("/system/script/print", array("?comment" => "mikhmon", ".proplist" => ".id"));
+        foreach ((array)$ids as $idr) {
+            if (!isset($idr['.id'])) {
+                continue;
+            }
+            $r = $API->comm("/system/script/remove", array('.id' => $idr['.id']));
+            if (!is_array($r) || !isset($r['!trap'])) {
+                $deleted++;
+            }
+        }
+    } else {
+        $names = $API->comm("/system/script/print", array("?comment" => "mikhmon", ".proplist" => "name"));
+        foreach ((array)$names as $n) {
+            if (!isset($n['name'])) {
+                continue;
+            }
+            $name = (string)$n['name'];
+            $match = ($owner !== null && mikhmon_script_month($name) === (string)$owner)
+                || ($source !== null && mikhmon_script_parse($name)[0] === (string)$source);
+            if (!$match) {
+                continue;
+            }
+            $ids = $API->comm("/system/script/print", array("?comment" => "mikhmon", "?name" => $name, ".proplist" => ".id"));
+            foreach ((array)$ids as $idr) {
+                if (!isset($idr['.id'])) {
+                    continue;
+                }
+                $r = $API->comm("/system/script/remove", array('.id' => $idr['.id']));
+                if (!is_array($r) || !isset($r['!trap'])) {
+                    $deleted++;
+                }
+            }
+        }
+    }
+    $API->disconnect();
+    return array('ok' => true, 'deleted' => $deleted);
+}
+
 function mikhmon_import_delete($session, $batch = 300)
 {
     $row = mikhmon_session_get((string)$session);

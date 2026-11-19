@@ -36,6 +36,7 @@ include('../lang/'.$langid.'.php');
   include('../include/config.php');
   include('../include/readcfg.php');
   include_once('../include/mikhmon_records.php');
+  include_once('../lib/sales_import.php');
 
 // routeros api
   include_once('../lib/routeros_api.class.php');
@@ -64,45 +65,28 @@ include('../lang/'.$langid.'.php');
     $idhr = $thisM . "/" . $thisD . "/" . $thisY;
     $idbl = $thisM . $thisY;
 
-    // First view of a router that has no data in the DB yet: copy the router
-    // sales records into SQLite so the dashboard income box is never empty.
-    if (mikhmon_sales_count($session) == 0) {
-      mikhmon_sales_sync($API, $session);
+    // Same data source rule as the selling report: the DB once the import
+    // run finished, the router while it is still incomplete.
+    $queue_total = mikhmon_import_queue_count($session);
+    $queue_done = mikhmon_import_queue_count($session, 1);
+    if ($queue_total > 0) {
+      $use_router = ($queue_done < $queue_total);
+    } else {
+      $use_router = (mikhmon_sales_count($session) == 0);
     }
+    if ($use_router) {
+      $stats_live = mikhmon_scripts_stats(mikhmon_scripts_all($API));
+    } else {
+      $stats_live = mikhmon_sales_stats($session);
+    }
+    $tHr = $stats_live['today_sum'];
+    $TotalRHr = $stats_live['today_count'];
+    $tBl = $stats_live['month_sum'];
+    $TotalRBl = $stats_live['month_count'];
 
     $_SESSION[$session.'idhr'] = $idhr;
-
-   /* $getSRHr = $API->comm("/system/script/print", array(
-      "?source" => "$idhr",
-    ));
-    $TotalRHr = count($getSRHr);
-    $_SESSION[$session.'totalHr'] = $TotalRHr;*/
-    $getSRBl = mikhmon_sales_find($session, null, $idbl);
-    $TotalRBl = count($getSRBl);
     $_SESSION[$session.'totalBl'] = $TotalRBl;
-/*
-    for ($i = 0; $i < $TotalRHr; $i++) {
-
-      $tHr += explode("-|-", $getSRHr[$i]['name'])[3];
-
-    }*/
-    foreach($getSRBl as $row){
-    
-      if((explode("-|-", $row['name'])[0]) == $idhr){
-         $tHr += explode("-|-", $row['name'])[3];
-         $TotalRHr += count((array)$row['source']); /*Modif line add (array) by github https://github.com/MasKawer*/
- 
-       }
-       $tBl += explode("-|-", $row['name'])[3];
-
-      if($TotalRHr == ""){
-        $TotalRHr = "0";
-        $_SESSION[$session.'totalHr'] = "0";
-      }else{
-        $_SESSION[$session.'totalHr'] = $TotalRHr;
-      }
-      
-    }
+    $_SESSION[$session.'totalHr'] = $TotalRHr;
   }
 }
 ?>

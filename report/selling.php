@@ -67,37 +67,26 @@ if (!isset($_SESSION["mikhmon"])) {
 		$stats = mikhmon_sales_stats($session);
 	}
 
-	// --- delete data (DB rows + best-effort router cleanup) ---
+	// --- delete data: the modal chooses the source (DB and/or router scripts) and the scope ---
 	if (isset($remdata)) {
-		if (strlen($idhr) > "0") {
-			mikhmon_sales_delete($session, $idhr);
-		} elseif (strlen($idbl) > "0") {
-			mikhmon_sales_delete($session, null, $idbl);
-		}
-		if ($API->connect($iphost, $userhost, decrypt($passwdhost))) {
-			foreach (mikhmon_scripts_all($API) as $r) {
-				if (!isset($r['name'])) {
-					continue;
-				}
-				$matched = ($idbl != "" && mikhmon_script_month((string)$r['name']) === (string)$idbl)
-					|| ($idhr != "" && mikhmon_script_parse((string)$r['name'])[0] === (string)$idhr);
-				if (!$matched) {
-					continue;
-				}
-				$ids = $API->comm("/system/script/print", array(
-					"?comment" => "mikhmon",
-					"?name" => $r['name'],
-					".proplist" => ".id",
-				));
-				foreach ($ids as $idRow) {
-					if (!isset($idRow['.id'])) {
-						continue;
-					}
-					$API->write('/system/script/remove', false);
-					$API->write('=.id=' . $idRow['.id']);
-					$API->read();
-				}
+		$del_scope = (isset($_POST['del_scope']) && $_POST['del_scope'] === 'all') ? 'all' : 'view';
+		$del_db = isset($_POST['del_db']) && $_POST['del_db'] == '1';
+		$del_router = isset($_POST['del_router']) && $_POST['del_router'] == '1';
+		$del_src = null;
+		$del_own = null;
+		if ($del_scope === 'view') {
+			if ($idhr !== '') {
+				$del_src = $idhr;
+			} elseif ($idbl !== '') {
+				$del_own = $idbl;
 			}
+		}
+		set_time_limit(0);
+		if ($del_db) {
+			mikhmon_sales_delete($session, $del_src, $del_own);
+		}
+		if ($del_router) {
+			mikhmon_import_delete_period($session, $del_src, $del_own);
 		}
 		echo "<script>window.location='./?report=selling&session=" . $session . "'</script>";
 	}
@@ -617,15 +606,18 @@ $(document).ready(function(){
 <!-- Modal delete data -->
 <div class="modal-window" id="remdata" aria-hidden="true">
   <div>
-  	<header><h1><?= $_confirm ?></h1></header>
+  	<header><h1><i class="fa fa-trash"></i> Hapus Data</h1></header>
   	<a style="font-weight:bold;" href="#" title="Close" class="modal-close">X</a>
-	<p>
-			<?= $_delete_report ?>
-	</p>
+	<p style="margin-bottom:6px;">Pilih data yang ingin dihapus:</p>
 	<form autocomplete="off" method="post" action="">
-	<center>
-	<button type="submit" name="remdata" title="Yes" class="btn bg-primary">Yes</button>&nbsp;
-	<a class="btn bg-secondary" href="#" title="Close" class="modal-close">No</a>
+	<label style="display:block; font-weight:normal;"><input type="checkbox" name="del_db" value="1" checked> Hapus data di <b>database</b></label>
+	<label style="display:block; font-weight:normal;"><input type="checkbox" name="del_router" value="1"> Hapus <b>script di Mikrotik</b></label>
+	<hr style="border:none;border-top:1px solid #ccc;margin:8px 0;">
+	<label style="display:block; font-weight:normal;"><input type="radio" name="del_scope" value="view" checked> Hanya data yang sedang tampil (<?= $filedownload; ?>)</label>
+	<label style="display:block; font-weight:normal;"><input type="radio" name="del_scope" value="all"> Semua data (semua bulan/tahun)</label>
+	<center style="margin-top:10px;">
+	<button type="submit" name="remdata" value="1" class="btn bg-danger"><i class="fa fa-trash"></i> Hapus</button>&nbsp;
+	<a class="btn bg-secondary" href="#" title="Close" class="modal-close">Batal</a>
 	</center>
 	</form>
   </div>
