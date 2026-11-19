@@ -217,3 +217,41 @@ function mikhmon_scripts_sum_price($rows)
     }
     return $total;
 }
+
+// KPI statistics from router record rows (same shape as mikhmon_sales_stats).
+function mikhmon_scripts_stats($rows)
+{
+    $thisBucket = strtolower(date("M")) . date("Y");
+    $prevTs = strtotime(date("Y-m-01") . " -1 month");
+    $prevBucket = strtolower(date("M", $prevTs)) . date("Y", $prevTs);
+    $todayLegacy = strtolower(date("M")) . "/" . date("d") . "/" . date("Y");
+    $todayV7 = date("Y-m-d");
+    $stats = array(
+        'total_count' => 0, 'total_sum' => 0.0,
+        'month_count' => 0, 'month_sum' => 0.0, 'prev_sum' => 0.0,
+        'today_count' => 0, 'today_sum' => 0.0, 'month_bucket' => $thisBucket,
+    );
+    foreach ($rows as $r) {
+        if (!isset($r['name'])) {
+            continue;
+        }
+        $name = (string)$r['name'];
+        $f = mikhmon_script_parse($name);
+        $price = (float)$f[3];
+        $bucket = mikhmon_script_month($name);
+        $stats['total_count']++;
+        $stats['total_sum'] += $price;
+        if ($bucket === $thisBucket) {
+            $stats['month_count']++;
+            $stats['month_sum'] += $price;
+        }
+        if ($bucket === $prevBucket) {
+            $stats['prev_sum'] += $price;
+        }
+        if ($f[0] === $todayLegacy || $f[0] === $todayV7) {
+            $stats['today_count']++;
+            $stats['today_sum'] += $price;
+        }
+    }
+    return $stats;
+}

@@ -24,6 +24,8 @@ function mikhmon_db()
             $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
             $db->exec('PRAGMA journal_mode=WAL');
             $db->exec('PRAGMA busy_timeout=5000');
+            // Ensure the schema (including new tables added by upgrades) exists.
+            mikhmon_db_init();
         } catch (PDOException $e) {
             $db = false;
         }
@@ -82,6 +84,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS sales_records_script
   ON sales_records(session, ros_script_id) WHERE ros_script_id != '';
 CREATE INDEX IF NOT EXISTS sales_records_session_owner ON sales_records(session, owner);
 CREATE INDEX IF NOT EXISTS sales_records_session_date ON sales_records(session, c_date);
+CREATE TABLE IF NOT EXISTS sales_import_queue (
+  session TEXT NOT NULL DEFAULT '',
+  name TEXT NOT NULL DEFAULT '',
+  done INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (session, name)
+);
+CREATE INDEX IF NOT EXISTS sales_import_queue_done ON sales_import_queue(session, done);
 SQL);
         return true;
     } catch (PDOException $e) {

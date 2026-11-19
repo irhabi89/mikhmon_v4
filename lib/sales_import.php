@@ -110,3 +110,190 @@ function mikhmon_import_sales_session($session, $opts = array())
     $result['ok'] = true;
     return $result;
 }
+
+/* ---- Chunked, pausable import for the report page (queue persisted in SQLite) ---- */
+
+function mikhmon_import_queue_count($session, $done = null)
+{
+    $db = mikhmon_db();
+    if ($db === false) {
+        return 0;
+    }
+    $sql = 'SELECT COUNT(*) FROM sales_import_queue WHERE session = ?';
+    $vals = array($session);
+    if ($done !== null) {
+        $sql .= ' AND done = ?';
+        $vals[] = (int)$done;
+    }
+    try {
+        $st = $db->prepare($sql);
+        $st->execute($vals);
+        return (int)$st->fetchColumn();
+    } catch (PDOException $e) {
+        return 0;
+    }
+}
+
+function mikhmon_import_router_total($session)
+{
+    $row = mikhmon_session_get((string)$session);
+    if (!is_array($row)) {
+        return -1;
+    }
+    $API = new RouterosAPI();
+    $API->debug = false;
+    if (!$API->connect($row['ip_host'], $row['user_host'], decrypt($row['pass_host']))) {
+        return -1;
+    }
+    $c = $API->comm("/system/script/print", array("?comment" => "mikhmon", "count-only" => ""));
+    $API->disconnect();
+    if (is_array($c)) {
+        $c = reset($c);
+    }
+    return is_numeric($c) ? (int)$c : -1;
+}
+
+function mikhmon_import_status($session)
+{
+    $router_total = mikhmon_import_router_total($session);
+    $db_count = mikhmon_sales_count($session);
+    $percent = ($router_total > 0) ? min(100.0, round($db_count / $router_total * 100, 1)) : 0.0;
+    return array(
+        'ok' => true,
+        'router_total' => $router_total,
+        'db_count' => $db_count,
+        'percent' => $percent,
+        'queue_total' => mikhmon_import_queue_count($session),
+        'queue_done' => mikhmon_import_queue_count($session, 1),
+    );
+}
+
+function mikhmon_import_prepare($session)
+{
+    $row = mikhmon_session_get((string)$session);
+    if (!is_array($row)) {
+        return array('ok' => false, 'error' => 'router tidak ada di database');
+    }
+    $API = new RouterosAPI();
+    $API->debug = false;
+    if (!$API->connect($row['ip_host'], $row['user_host'], decrypt($row['pass_host']))) {
+        return array('ok' => false, 'error' => 'gagal terhubung ke Mikrotik');
+    }
+    $names = $API->comm("/system/script/print", array("?comment" => "mikhmon", ".proplist" => "name"));
+    $API->disconnect();
+    if (!is_array($names)) {
+        return array('ok' => false, 'error' => 'gagal membaca daftar script');
+    }
+    $db = mikhmon_db();
+    if ($db === false) {
+        return array('ok' => false, 'error' => 'database tidak tersedia');
+    }
+    $prepared = 0;
+    try {
+        $db->beginTransaction();
+        $db->prepare('DELETE FROM sales_import_queue WHERE session = ?')->execute(array($session));
+        $st = $db->prepare('INSERT OR IGNORE INTO sales_import_queue (session, name, done) VALUES (?, ?, 0)');
+        foreach ($names as $n) {
+            if (!isset($n['name'])) {
+                continue;
+            }
+            $st->execute(array($session, (string)$n['name']));
+            $prepared++;
+        }
+        // Records already stored in the DB don't need to be processed again.
+        $db->prepare('UPDATE sales_import_queue SET done = 1 WHERE session = ? AND name IN (SELECT name FROM sales_records WHERE session = ?)')
+            ->execute(array($session, $session));
+        $db->commit();
+    } catch (PDOException $e) {
+        try { $db->rollBack(); } catch (PDOException $e2) {}
+        return array('ok' => false, 'error' => 'gagal menyiapkan antrean');
+    }
+    $st = mikhmon_import_status($session);
+    $st['prepared'] = $prepared;
+    return $st;
+}
+
+function mikhmon_import_chunk($session, $batch = 500)
+{
+    $db = mikhmon_db();
+    if ($db === false) {
+        return array('ok' => false, 'error' => 'database tidak tersedia');
+    }
+    $batch = max(1, (int)$batch);
+    $processed = 0;
+    try {
+        $q = $db->prepare('SELECT name FROM sales_import_queue WHERE session = ? AND done = 0 LIMIT ' . $batch);
+        $q->execute(array($session));
+        $pending = $q->fetchAll(PDO::FETCH_ASSOC);
+        if (empty($pending)) {
+            $st = mikhmon_import_status($session);
+            $st['processed'] = 0;
+            return $st;
+        }
+        $db->beginTransaction();
+        $upd = $db->prepare('UPDATE sales_import_queue SET done = 1 WHERE session = ? AND name = ?');
+        foreach ($pending as $p) {
+            $name = (string)$p['name'];
+            $f = mikhmon_script_parse($name);
+            mikhmon_sales_insert(array(
+                'session' => (string)$session,
+                'ros_script_id' => '',
+                'name' => $name,
+                'source' => $f[0],
+                'owner' => mikhmon_script_month($name),
+                'comment' => 'mikhmon',
+                'c_date' => $f[0],
+                'c_time' => $f[1],
+                'c_username' => $f[2],
+                'c_price' => $f[3],
+                'c_address' => $f[4],
+                'c_mac' => $f[5],
+                'c_validity' => $f[6],
+                'c_profile' => $f[7],
+                'c_comment' => $f[8],
+            ));
+            $upd->execute(array($session, $name));
+            $processed++;
+        }
+        $db->commit();
+    } catch (PDOException $e) {
+        try { $db->rollBack(); } catch (PDOException $e2) {}
+        return array('ok' => false, 'error' => 'gagal import');
+    }
+    $st = mikhmon_import_status($session);
+    $st['processed'] = $processed;
+    return $st;
+}
+
+function mikhmon_import_delete($session, $batch = 300)
+{
+    $row = mikhmon_session_get((string)$session);
+    if (!is_array($row)) {
+        return array('ok' => false, 'error' => 'router tidak ada di database');
+    }
+    $API = new RouterosAPI();
+    $API->debug = false;
+    if (!$API->connect($row['ip_host'], $row['user_host'], decrypt($row['pass_host']))) {
+        return array('ok' => false, 'error' => 'gagal terhubung ke Mikrotik');
+    }
+    $ids = $API->comm("/system/script/print", array("?comment" => "mikhmon", ".proplist" => ".id"));
+    $deleted = 0;
+    $remaining = 0;
+    foreach ((array)$ids as $idr) {
+        if (!isset($idr['.id'])) {
+            continue;
+        }
+        if ($deleted >= $batch) {
+            $remaining++;
+            continue;
+        }
+        $r = $API->comm("/system/script/remove", array('.id' => $idr['.id']));
+        if (!is_array($r) || !isset($r['!trap'])) {
+            $deleted++;
+        } else {
+            $remaining++;
+        }
+    }
+    $API->disconnect();
+    return array('ok' => true, 'deleted' => $deleted, 'remaining' => $remaining);
+}

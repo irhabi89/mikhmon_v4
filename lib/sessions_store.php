@@ -226,12 +226,8 @@ function mikhmon_sales_insert($row)
     }
 }
 
-function mikhmon_sales_find($session, $source = null, $owner = null, $comment = null)
+function mikhmon_sales_where($session, $source, $owner, $comment)
 {
-    $db = mikhmon_db();
-    if ($db === false) {
-        return array();
-    }
     $where = 'session = ?';
     $vals = array($session);
     if ($source !== null) {
@@ -246,14 +242,97 @@ function mikhmon_sales_find($session, $source = null, $owner = null, $comment = 
         $where .= ' AND comment = ?';
         $vals[] = $comment;
     }
+    return array($where, $vals);
+}
+
+function mikhmon_sales_find($session, $source = null, $owner = null, $comment = null, $limit = null, $offset = 0)
+{
+    $db = mikhmon_db();
+    if ($db === false) {
+        return array();
+    }
+    list($where, $vals) = mikhmon_sales_where($session, $source, $owner, $comment);
+    $sql = 'SELECT * FROM sales_records WHERE ' . $where . ' ORDER BY imported_at, id';
+    if ($limit !== null) {
+        $sql .= ' LIMIT ' . (int)$limit . ' OFFSET ' . (int)$offset;
+    }
     try {
-        $st = $db->prepare('SELECT * FROM sales_records WHERE ' . $where
-            . ' ORDER BY imported_at, id');
+        $st = $db->prepare($sql);
         $st->execute($vals);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     } catch (PDOException $e) {
         return array();
     }
+}
+
+function mikhmon_sales_count_for($session, $source = null, $owner = null, $comment = null)
+{
+    $db = mikhmon_db();
+    if ($db === false) {
+        return 0;
+    }
+    list($where, $vals) = mikhmon_sales_where($session, $source, $owner, $comment);
+    try {
+        $st = $db->prepare('SELECT COUNT(*) FROM sales_records WHERE ' . $where);
+        $st->execute($vals);
+        return (int)$st->fetchColumn();
+    } catch (PDOException $e) {
+        return 0;
+    }
+}
+
+function mikhmon_sales_sum_for($session, $source = null, $owner = null, $comment = null)
+{
+    $db = mikhmon_db();
+    if ($db === false) {
+        return 0.0;
+    }
+    list($where, $vals) = mikhmon_sales_where($session, $source, $owner, $comment);
+    try {
+        $st = $db->prepare('SELECT COALESCE(SUM(c_price), 0) FROM sales_records WHERE ' . $where);
+        $st->execute($vals);
+        return (float)$st->fetchColumn();
+    } catch (PDOException $e) {
+        return 0.0;
+    }
+}
+
+// Sales records for today (legacy "nov/19/2026" or RouterOS 7 "2026-11-19").
+function mikhmon_sales_today($session)
+{
+    $db = mikhmon_db();
+    if ($db === false) {
+        return array('count' => 0, 'sum' => 0.0);
+    }
+    $legacy = strtolower(date("M")) . "/" . date("d") . "/" . date("Y");
+    $v7 = date("Y-m-d");
+    try {
+        $st = $db->prepare('SELECT COUNT(*) c, COALESCE(SUM(c_price), 0) s FROM sales_records WHERE session = ? AND (c_date = ? OR c_date = ?)');
+        $st->execute(array($session, $legacy, $v7));
+        $r = $st->fetch(PDO::FETCH_ASSOC);
+        return array('count' => $r ? (int)$r['c'] : 0, 'sum' => $r ? (float)$r['s'] : 0.0);
+    } catch (PDOException $e) {
+        return array('count' => 0, 'sum' => 0.0);
+    }
+}
+
+// KPI statistics for the report cards.
+function mikhmon_sales_stats($session)
+{
+    $thisBucket = strtolower(date("M")) . date("Y");
+    $prevTs = strtotime(date("Y-m-01") . " -1 month");
+    $prevBucket = strtolower(date("M", $prevTs)) . date("Y", $prevTs);
+    $today = mikhmon_sales_today($session);
+    return array(
+        'total_count' => mikhmon_sales_count_for($session),
+        'total_sum' => mikhmon_sales_sum_for($session),
+        'month_count' => mikhmon_sales_count_for($session, null, $thisBucket),
+        'month_sum' => mikhmon_sales_sum_for($session, null, $thisBucket),
+        'prev_sum' => mikhmon_sales_sum_for($session, null, $prevBucket),
+        'today_count' => $today['count'],
+        'today_sum' => $today['sum'],
+        'month_bucket' => $thisBucket,
+    );
 }
 
 // Number of sales records stored for a session.

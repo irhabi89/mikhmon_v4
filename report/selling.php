@@ -22,67 +22,53 @@ if (!isset($_SESSION["mikhmon"])) {
 	header("Location:../admin.php?id=login");
 } else {
 
-	$idhr = $_GET['idhr'];
-	$idbl = $_GET['idbl'];
-	$idbl2 = explode("/",$idhr)[0].explode("/",$idhr)[2];
-	if ($idhr != ""){
-		$_SESSION['report'] = "&idhr=".$idhr;
-	} elseif ($idbl != ""){
-		$_SESSION['report'] = "&idbl=".$idbl;
+	$idhr = isset($_GET['idhr']) ? $_GET['idhr'] : '';
+	$idbl = isset($_GET['idbl']) ? $_GET['idbl'] : '';
+	$idhr_parts = explode("/", $idhr);
+	$idbl2 = (count($idhr_parts) >= 3) ? ($idhr_parts[0] . $idhr_parts[2]) : '';
+	if ($idhr != "") {
+		$_SESSION['report'] = "&idhr=" . $idhr;
+	} elseif ($idbl != "") {
+		$_SESSION['report'] = "&idbl=" . $idbl;
 	} else {
 		$_SESSION['report'] = "";
 	}
 	$_SESSION['idbl'] = $idbl;
-	$remdata = ($_POST['remdata']);
-	$prefix = $_GET['prefix'];
-	
+	$remdata = isset($_POST['remdata']) ? $_POST['remdata'] : null;
+	$prefix = isset($_GET['prefix']) ? $_GET['prefix'] : '';
+	$page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
+	$per_page = 50;
 
 	include_once('./include/timezone.php');
 	include_once('./include/mikhmon_records.php');
+	include_once('./lib/sales_import.php');
 	$gettimezone = $API->comm("/system/clock/print");
 	$timezone = mikhmon_timezone_from_clock(isset($gettimezone[0]) ? $gettimezone[0] : array());
 	date_default_timezone_set($timezone);
 
-	if ($API->connect($iphost, $userhost, decrypt($passwdhost))) {
-		// First view of a router that has no data in the DB yet: copy the
-		// router sales records into SQLite so the report is never empty.
-		// Later/new records can be imported with the Import panel below.
-		if (mikhmon_sales_count($session) == 0) {
-			mikhmon_sales_sync($API, $session);
-		}
+	// --- data source: the router while the import is incomplete, the DB once complete ---
+	// Once an import run finishes (queue fully processed) the DB is authoritative,
+	// even if the router keeps recording new sales for later imports.
+	$db_count = mikhmon_sales_count($session);
+	$queue_total = mikhmon_import_queue_count($session);
+	$queue_done = mikhmon_import_queue_count($session, 1);
+	if ($queue_total > 0) {
+		$use_router = ($queue_done < $queue_total);
+	} else {
+		$router_total = mikhmon_import_router_total($session); // -1 when unreachable
+		$use_router = ($router_total >= 0) ? ($db_count < $router_total) : ($db_count == 0);
 	}
 
+	$router_rows = array();
+	if ($use_router) {
+		$router_rows = mikhmon_scripts_all($API);
+		$stats = mikhmon_scripts_stats($router_rows);
+	} else {
+		$stats = mikhmon_sales_stats($session);
+	}
+
+	// --- delete data (DB rows + best-effort router cleanup) ---
 	if (isset($remdata)) {
-		if (strlen($idhr) > "0") {
-			if ($API->connect($iphost, $userhost, decrypt($passwdhost))) {
-				$API->write('/system/script/print', false);
-				$API->write('?source=' . $idhr . '', false);
-				$API->write('=.proplist=.id');
-				$ARREMD = $API->read();
-				for ($i = 0; $i < count($ARREMD); $i++) {
-					$API->write('/system/script/remove', false);
-					$API->write('=.id=' . $ARREMD[$i]['.id']);
-					$READ = $API->read();
-
-				}
-			}
-		} elseif (strlen($idbl) > "0") {
-			if ($API->connect($iphost, $userhost, decrypt($passwdhost))) {
-				$API->write('/system/script/print', false);
-				$API->write('?owner=' . $idbl . '', false);
-				$API->write('=.proplist=.id');
-				$ARREMD = $API->read();
-				for ($i = 0; $i < count($ARREMD); $i++) {
-					$API->write('/system/script/remove', false);
-					$API->write('=.id=' . $ARREMD[$i]['.id']);
-					$READ = $API->read();
-
-				}
-			}
-
-		}
-		// Mikhmon v3.21+: sales data lives in the DB; delete it there and
-		// best-effort delete the corresponding scripts on the router.
 		if (strlen($idhr) > "0") {
 			mikhmon_sales_delete($session, $idhr);
 		} elseif (strlen($idbl) > "0") {
@@ -116,126 +102,144 @@ if (!isset($_SESSION["mikhmon"])) {
 		echo "<script>window.location='./?report=selling&session=" . $session . "'</script>";
 	}
 
-	// --- Import sales from the router into the DB (report page UI action) ---
-	$imp_message = '';
-	$imp_error = '';
-	if (isset($_POST['mikhmon_import'])) {
-		include_once('./lib/sales_import.php');
-		set_time_limit(0);
-		@ini_set('memory_limit', '1G');
-		$imp_month = null;
-		if (!empty($_POST['imp_m']) && !empty($_POST['imp_y'])) {
-			$imp_month = strtolower(preg_replace('/[^a-z]/i', '', $_POST['imp_m'])) . preg_replace('/[^0-9]/', '', $_POST['imp_y']);
-		}
-		$imp_res = mikhmon_import_sales_session($session, array(
-			'dry_run' => false,
-			'delete' => (isset($_POST['imp_delete']) && $_POST['imp_delete'] == '1'),
-			'month' => $imp_month,
-		));
-		if (!empty($imp_res['ok'])) {
-			$imp_message = 'Import selesai: ' . (int)$imp_res['imported'] . ' transaksi baru masuk database.'
-				. (!empty($_POST['imp_delete']) ? ' ' . (int)$imp_res['deleted'] . ' script dihapus dari Mikrotik.' : '');
-		} else {
-			$imp_error = 'Import gagal: ' . $imp_res['error'];
-		}
-	}
-
 	if ($prefix != "") {
 		$fprefix = "-prefix-[" . $prefix . "]";
 	} else {
 		$fprefix = "";
 	}
-	if (strlen($idhr) > "0") {
-		if ($API->connect($iphost, $userhost, decrypt($passwdhost))) {
-			$getData = mikhmon_sales_find($session, $idhr);
-			$TotalReg = mikhmon_count_rows($getData);
-			if ($TotalReg == 0) {
-				// Fallback: RouterOS 7-style date ("2026-11-19") in the record
-				// name vs legacy $idhr ("nov/19/2026").
-				$v7date = date('Y-m-d', strtotime((string)$idhr));
-				$getData = array();
-				foreach (mikhmon_sales_find($session) as $r) {
-					if (isset($r['name'])) {
-						$d = mikhmon_script_parse((string)$r['name'])[0];
-						if ($d === (string)$idhr || $d === $v7date) {
-							$getData[] = $r;
-						}
-					}
+
+	// --- report rows for the current view ---
+	$allRows = array();
+	$filedownload = "all";
+	$shf = "text";
+	$shd = "none";
+	$v7date = ($idhr !== '') ? date('Y-m-d', strtotime((string)$idhr)) : '';
+	$sql_paged = false;
+
+	if ($use_router) {
+		if (strlen($idhr) > "0") {
+			$allRows = mikhmon_scripts_by_source($router_rows, $idhr);
+			if (count($allRows) == 0) {
+				foreach ($router_rows as $r) {
+					if (!isset($r['name'])) { continue; }
+					$d = mikhmon_script_parse((string)$r['name'])[0];
+					if ($d === (string)$idhr || $d === $v7date) { $allRows[] = $r; }
 				}
-				$TotalReg = count($getData);
+			}
+			$filedownload = $idhr;
+			$shf = "hidden";
+			$shd = "inline-block";
+		} elseif (strlen($idbl) > "0") {
+			$allRows = mikhmon_scripts_by_month($router_rows, $idbl);
+			$filedownload = $idbl;
+			$shf = "hidden";
+			$shd = "inline-block";
+		} else {
+			$allRows = $router_rows;
+		}
+	} else {
+		if (strlen($idhr) > "0") {
+			$allRows = mikhmon_sales_find($session, $idhr);
+			if (count($allRows) == 0) {
+				foreach (mikhmon_sales_find($session) as $r) {
+					if (!isset($r['name'])) { continue; }
+					$d = mikhmon_script_parse((string)$r['name'])[0];
+					if ($d === (string)$idhr || $d === $v7date) { $allRows[] = $r; }
+				}
+			}
+			$filedownload = $idhr;
+			$shf = "hidden";
+			$shd = "inline-block";
+		} elseif (strlen($idbl) > "0") {
+			$allRows = mikhmon_sales_find($session, null, $idbl);
+			$filedownload = $idbl;
+			$shf = "hidden";
+			$shd = "inline-block";
+		} else {
+			// "All" view: page in SQL so tens of thousands of rows are not loaded at once.
+			$TotalReg = mikhmon_sales_count_for($session);
+			$sumPrice = mikhmon_sales_sum_for($session);
+			$totalPages = max(1, (int)ceil($TotalReg / $per_page));
+			if ($page > $totalPages) { $page = $totalPages; }
+			$getData = mikhmon_sales_find($session, null, null, null, $per_page, ($page - 1) * $per_page);
+			$sql_paged = true;
+			$_SESSION['dataresume'] = '';
+			$_SESSION['totalresume'] = $TotalReg . '/0';
+		}
+	}
+
+	if ($prefix != "") {
+		$filtered = array();
+		foreach ($allRows as $r) {
+			if (isset($r['name']) && substr((string)mikhmon_script_parse((string)$r['name'])[2], 0, strlen($prefix)) == $prefix) {
+				$filtered[] = $r;
 			}
 		}
-		$filedownload = $idhr;
-		$shf = "hidden";
-		$shd = "inline-block";
-	} elseif (strlen($idbl) > "0") {
-		if ($API->connect($iphost, $userhost, decrypt($passwdhost))) {
-			$getData = mikhmon_sales_find($session, null, $idbl);
-			$TotalReg = mikhmon_count_rows($getData);
-		}
-		$filedownload = $idbl;
-		$shf = "hidden";
-		$shd = "inline-block";
-	} elseif ($idhr == "" || $idbl == "") {
-		if ($API->connect($iphost, $userhost, decrypt($passwdhost))) {
-			$getData = mikhmon_sales_find($session);
-			$TotalReg = mikhmon_count_rows($getData);
-		}
-		$filedownload = "all";
-		$shf = "text";
-		$shd = "none";
-	} elseif (strlen($idbl) > "0" ) {
-		if ($API->connect($iphost, $userhost, decrypt($passwdhost))) {
-			$getData = $API->comm("/system/script/print", array(
-				"?owner" => "$idbl",
-				".proplist" => "name",
-			));
-			$TotalReg = count($getData);
-		}
-		$filedownload = $idbl;
-		$shf = "hidden";
-		$shd = "inline-block";
+		$allRows = $filtered;
 	}
-	
+
+	if (!$sql_paged) {
+		$TotalReg = count($allRows);
+		$sumPrice = 0.0;
+		foreach ($allRows as $r) {
+			$f = mikhmon_script_parse(isset($r['name']) ? (string)$r['name'] : '');
+			$sumPrice += (float)$f[3];
+		}
+		$totalPages = max(1, (int)ceil($TotalReg / $per_page));
+		if ($page > $totalPages) { $page = $totalPages; }
+		$getData = array_slice($allRows, ($page - 1) * $per_page, $per_page);
+		// resume report data (only needed for month views)
+		$dataresume = '';
+		$totalresume = 0;
+		if ($idbl !== '') {
+			foreach ($allRows as $r) {
+				$f = mikhmon_script_parse(isset($r['name']) ? (string)$r['name'] : '');
+				$dataresume .= $f[0] . $f[3];
+				$totalresume += (float)$f[3];
+			}
+		}
+		$_SESSION['dataresume'] = $dataresume;
+		$_SESSION['totalresume'] = $TotalReg . '/' . $totalresume;
+	}
+	$pageCount = count($getData);
+
+	// KPI helpers
+	$price_decimals = in_array($currency, $cekindo['indo']) ? 0 : 2;
+	$fmt = function ($v) use ($currency, $price_decimals) {
+		return $currency . ' ' . number_format((float)$v, $price_decimals, ',', '.');
+	};
+	$delta = $stats['month_sum'] - $stats['prev_sum'];
+	$delta_pct = ($stats['prev_sum'] > 0) ? ($delta / $stats['prev_sum'] * 100) : ($stats['month_sum'] > 0 ? 100 : 0);
+	$page_query = 'report=selling&session=' . urlencode($session);
+	if ($idhr !== '') { $page_query .= '&idhr=' . urlencode($idhr); }
+	if ($idbl !== '') { $page_query .= '&idbl=' . urlencode($idbl); }
+	if ($prefix !== '') { $page_query .= '&prefix=' . urlencode($prefix); }
 }
 ?>
 		<script>
 			function downloadCSV(csv, filename) {
 			  var csvFile;
 			  var downloadLink;
-			  // CSV file
 			  csvFile = new Blob([csv], {type: "text/csv"});
-			  // Download link
 			  downloadLink = document.createElement("a");
-			  // File name
 			  downloadLink.download = filename;
-			  // Create a link to the file
 			  downloadLink.href = window.URL.createObjectURL(csvFile);
-			  // Hide download link
 			  downloadLink.style.display = "none";
-			  // Add the link to DOM
 			  document.body.appendChild(downloadLink);
-			  // Click download link
 			  downloadLink.click();
 			  }
-			  
 			  function exportTableToCSV(filename) {
 			    var csv = [];
 			    var rows = document.querySelectorAll("#dataTable tr");
-			    
 			   for (var i = 0; i < rows.length; i++) {
 			      var row = [], cols = rows[i].querySelectorAll("td, th");
 			   for (var j = 0; j < cols.length; j++)
             row.push(cols[j].innerText);
         csv.push(row.join(","));
         }
-        // Download CSV file
         downloadCSV(csv.join("\n"), filename);
         }
-
-// https://stackoverflow.com/questions/33218607/use-inline-css-to-apply-usd-currency-format-within-html-table
 function number_format(number, decimals, dec_point, thousands_sep) {
-
   number = (number + '')
     .replace(/[^0-9+\-Ee.]/g, '');
   var n = !isFinite(+number) ? 0 : +number,
@@ -243,52 +247,173 @@ function number_format(number, decimals, dec_point, thousands_sep) {
     sep = (typeof thousands_sep === 'undefined') ? ',' : thousands_sep,
     dec = (typeof dec_point === 'undefined') ? '.' : dec_point,
     s = '',
-    toFixedFix = function(n, prec) {
+    toFixedFix = function (n, prec) {
       var k = Math.pow(10, prec);
-      return '' + (Math.round(n * k) / k)
-        .toFixed(prec);
+      return '' + Math.round(n * k) / k;
     };
-  // Fix for IE parseFloat(0.55).toFixed(0) = 0;
-  s = (prec ? toFixedFix(n, prec) : '' + Math.round(n))
-    .split('.');
+  s = (prec ? toFixedFix(n, prec) : '' + Math.round(n)).split('.');
   if (s[0].length > 3) {
     s[0] = s[0].replace(/\B(?=(?:\d{3})+(?!\d))/g, sep);
   }
-  if ((s[1] || '')
-    .length < prec) {
+  if ((s[1] || '').length < prec) {
     s[1] = s[1] || '';
-    s[1] += new Array(prec - s[1].length + 1)
-      .join('0');
+    s[1] += new Array(prec - s[1].length + 1).join('0');
   }
   return s.join(dec);
 }
-        
-		window.onload=function() {
-          var sum = 0;
-          var dataTable = document.getElementById("selling");
-          
-          // use querySelector to find all second table cells
-          var cells = document.querySelectorAll("td + td + td + td + td + td");
-          for (var i = 0; i < cells.length; i++)
-          sum+=parseFloat(cells[i].firstChild.data);
-          
-          var th = document.getElementById('total');
-    <?php if ($currency == in_array($currency, $cekindo['indo'])) {
-      echo 'th.innerHTML = "'.$currency.' " + number_format(th.innerHTML + (sum),"","",".") ;';
-		} else {
-			echo 'th.innerHTML = "'.$currency.' " + number_format(th.innerHTML + (sum),2,".",",") ;';
-		} ?>
-		
-		var tables = document.getElementsByTagName('tbody');
-    var table = tables[tables.length -1];
-    var rows = table.rows;
-    for(var i = 0, td; i < rows.length; i++){
-        td = document.createElement('td');
-        td.appendChild(document.createTextNode(i + 1));
-        rows[i].insertBefore(td, rows[i].firstChild);
+// --- Import modal (chunked, pausable/resumable, persisted in the DB) ---
+var impSession = <?= json_encode((string)$session); ?>;
+var impRunning = false;
+var impTimer = null;
+function impPost(action, cb) {
+  var x = new XMLHttpRequest();
+  x.open('POST', './process/importsales.php', true);
+  x.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+  x.onreadystatechange = function () {
+    if (x.readyState === 4) {
+      var data;
+      try { data = JSON.parse(x.responseText); } catch (e) { data = { ok: false, error: 'respons tidak valid' }; }
+      cb(data);
     }
-        }
-		</script>
+  };
+  x.send('action=' + encodeURIComponent(action) + '&session=' + encodeURIComponent(impSession));
+}
+function impRender(s) {
+  var info = document.getElementById('impInfo');
+  if (!s || s.ok === false) {
+    info.innerHTML = '<b class="text-danger">Gagal: ' + ((s && s.error) ? s.error : 'tidak diketahui') + '</b>';
+    return;
+  }
+  if (typeof s.percent !== 'undefined') {
+    var pct = s.percent;
+    var bar = document.getElementById('impBar');
+    bar.style.width = pct + '%';
+    bar.innerHTML = pct + '%';
+    info.innerHTML = 'Mikrotik: <b>' + (s.router_total >= 0 ? s.router_total : '?') +
+      '</b> script &nbsp;|&nbsp; Database: <b>' + s.db_count +
+      '</b> transaksi &nbsp;|&nbsp; Antrean: <b>' + (s.queue_done || 0) + '/' + (s.queue_total || 0) + '</b>';
+  }
+}
+function importStatus() { impPost('status', impRender); }
+function impSetButtons(start, pause, resume) {
+  document.getElementById('impStartBtn').style.display = start ? '' : 'none';
+  document.getElementById('impPauseBtn').style.display = pause ? '' : 'none';
+  document.getElementById('impResumeBtn').style.display = resume ? '' : 'none';
+}
+function importStart() {
+  document.getElementById('impInfo').innerHTML = 'Membaca daftar script dari Mikrotik... mohon tunggu.';
+  impSetButtons(false, false, false);
+  impPost('prepare', function (s) {
+    impRender(s);
+    if (s && s.ok) { importResume(); } else { impSetButtons(true, false, false); }
+  });
+}
+function importResume() {
+  if (impRunning) { return; }
+  impRunning = true;
+  impSetButtons(false, true, false);
+  impChunk();
+}
+function importPause() {
+  impRunning = false;
+  if (impTimer) { clearTimeout(impTimer); impTimer = null; }
+  impSetButtons(false, false, true);
+}
+function impChunk() {
+  if (!impRunning) { return; }
+  impPost('chunk', function (s) {
+    impRender(s);
+    if (!s || !s.ok) { impRunning = false; impSetButtons(false, false, true); return; }
+    if (s.queue_total > 0 && s.queue_done >= s.queue_total) {
+      if (document.getElementById('impDelete').checked) {
+        impRunning = false;
+        document.getElementById('impInfo').innerHTML = 'Import selesai. Menghapus script di Mikrotik...';
+        impDeleteLoop();
+        return;
+      }
+      impRunning = false;
+      impSetButtons(false, false, false);
+      document.getElementById('impInfo').innerHTML = '<b class="text-green">Import selesai. Memuat ulang laporan...</b>';
+      setTimeout(function () { location.href = './?report=selling&session=' + encodeURIComponent(impSession); }, 800);
+      return;
+    }
+    impTimer = setTimeout(impChunk, 120);
+  });
+}
+function impDeleteLoop() {
+  impPost('delete', function (d) {
+    if (d && d.ok) {
+      document.getElementById('impInfo').innerHTML = 'Menghapus script di Mikrotik... sisa <b>' + d.remaining + '</b>.';
+      if (d.remaining > 0) { setTimeout(impDeleteLoop, 150); return; }
+    }
+    impSetButtons(false, false, false);
+    setTimeout(function () { location.href = './?report=selling&session=' + encodeURIComponent(impSession); }, 800);
+  });
+}
+window.addEventListener('hashchange', function () {
+  if (window.location.hash === '#importModal') { importStatus(); }
+});
+</script>
+
+<!-- KPI cards (dashboard styling) -->
+<div class="row">
+	<div class="col-12">
+		<div class="row">
+			<div class="col-3">
+				<div class="box bmh-75 box-bordered">
+					<div class="box-group">
+						<div class="box-group-icon bg-primary"><i class="fa fa-money"></i></div>
+						<div class="box-group-area">
+							<b>Bulan Ini</b><br>
+							<h3><?= $fmt($stats['month_sum']); ?></h3>
+							<small class="<?= $delta >= 0 ? 'text-green' : 'text-danger'; ?>">
+								<i class="fa fa-arrow-<?= $delta >= 0 ? 'up' : 'down'; ?>"></i>
+								<?= number_format(abs($delta_pct), 1, ',', '.'); ?>%
+								(<?= ($delta >= 0 ? '+' : '-') . $fmt(abs($delta)); ?>) dari bulan lalu
+							</small>
+						</div>
+					</div>
+				</div>
+			</div>
+			<div class="col-3">
+				<div class="box bmh-75 box-bordered">
+					<div class="box-group">
+						<div class="box-group-icon bg-green"><i class="fa fa-calendar-check-o"></i></div>
+						<div class="box-group-area">
+							<b>Hari Ini</b><br>
+							<h3><?= $fmt($stats['today_sum']); ?></h3>
+							<small><?= number_format($stats['today_count'], 0, ',', '.'); ?> voucher terjual hari ini</small>
+						</div>
+					</div>
+				</div>
+			</div>
+			<div class="col-3">
+				<div class="box bmh-75 box-bordered">
+					<div class="box-group">
+						<div class="box-group-icon bg-indigo"><i class="fa fa-ticket"></i></div>
+						<div class="box-group-area">
+							<b>Voucher Keseluruhan</b><br>
+							<h3><?= number_format($stats['total_count'], 0, ',', '.'); ?></h3>
+							<small>total voucher tercatat</small>
+						</div>
+					</div>
+				</div>
+			</div>
+			<div class="col-3">
+				<div class="box bmh-75 box-bordered">
+					<div class="box-group">
+						<div class="box-group-icon bg-blue"><i class="fa fa-database"></i></div>
+						<div class="box-group-area">
+							<b>Nominal Keseluruhan</b><br>
+							<h3><?= $fmt($stats['total_sum']); ?></h3>
+							<small>total penjualan tercatat</small>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
 
 <script>
 $(document).ready(function(){
@@ -313,6 +438,7 @@ $(document).ready(function(){
 		  <button name="help" class="btn bg-primary" onclick="location.href='#help';" title="Help"><i class="fa fa-question"></i> <?= $_help ?></button>
 		  <button class="btn bg-primary" onclick="exportTableToCSV('report-mikhmon-<?= $filedownload . $fprefix; ?>.csv')" title="Download selling report"><i class="fa fa-download"></i> CSV</button>
 			<button class="btn bg-primary" onclick="location.href='./?report=selling&session=<?= $session; ?>';" title="Reload all data"><i class="fa fa-search"></i> <?= $_all ?></button>
+			<button class="btn bg-primary" onclick="location.href='#importModal';" title="Import data penjualan dari Mikrotik ke database"><i class="fa fa-upload"></i> Import</button>
 			<?php if(!empty($idbl)){echo '<button name="resume" id="openResume" class="btn bg-primary"title="Resume Report"><i class="fa fa-area-chart"></i> '.$_resume.'</button>';}else{
 				echo '<a class="btn bg-primary" href="./?report=selling&idbl='.$idbl2.'&session='.$session.'" title="Show '.ucfirst(substr($idbl2,0,3).' '.substr($idbl2,3,5)).'"><i class="fa fa-search"></i> '.ucfirst(substr($idbl2,0,3).' '.substr($idbl2,3,5)).'</a>';}?>
 		  <button name="print" class="btn bg-primary" onclick="window.open('./report/print.php?<?= explode("?report=selling&",$url)[1] ?>','_blank');" title="Print"><i class="fa fa-print"></i> <?= $_print ?></button>
@@ -321,44 +447,15 @@ $(document).ready(function(){
 		</div>
 	</div>
 	</div>
-	<?php
-	$imp_db_count = function_exists('mikhmon_sales_count') ? mikhmon_sales_count($session) : 0;
-	$imp_months = array(1 => 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec');
-	$imp_month_names = array(1 => 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December');
-	if (!empty($imp_message)) {
-		echo '<div class="bg-green" style="padding:6px;margin-bottom:8px;border-radius:4px;">' . htmlspecialchars($imp_message) . '</div>';
-	}
-	if (!empty($imp_error)) {
-		echo '<div class="bg-danger" style="padding:6px;margin-bottom:8px;border-radius:4px;">' . htmlspecialchars($imp_error) . '</div>';
-	}
-	?>
-	<div class="box-bordered" style="padding:8px;margin-bottom:10px;">
-		<form method="post" action="" style="margin:0;">
-			<i class="fa fa-database"></i> <b>Database: <?= number_format($imp_db_count, 0, ',', '.') ?></b> transaksi tersimpan.
-			&nbsp;|&nbsp; <b>Import dari Mikrotik:</b>
-			<select name="imp_m" style="padding:4px;">
-				<option value="">Semua bulan</option>
-				<?php for ($x = 1; $x <= 12; $x++) { echo '<option value="' . $imp_months[$x] . '">' . $imp_month_names[$x] . '</option>'; } ?>
-			</select>
-			<select name="imp_y" style="padding:4px;">
-				<?php for ($Y = 2018; $Y <= (int)date('Y'); $Y++) { echo '<option value="' . $Y . '"' . ($Y == (int)date('Y') ? ' selected' : '') . '>' . $Y . '</option>'; } ?>
-			</select>
-			<label style="font-weight:normal; margin-left:8px;">
-				<input type="checkbox" name="imp_delete" value="1"> Hapus script penjualan di Mikrotik setelah berhasil (hati-hati)
-			</label>
-			<button type="submit" name="mikhmon_import" value="1" class="btn bg-primary"><i class="fa fa-upload"></i> Import</button>
-		</form>
-	</div>
 		<div class="input-group mr-b-10">
 			<div class="input-group-1 col-box-2">
 			<select style="padding:5px;" class="group-item group-item-l" title="<?= $_days ?>" id="D">
         			<?php
-										$day = explode("/", $idhr)[1];
+										$day = isset($idhr_parts[1]) ? $idhr_parts[1] : '';
 										if ($day != "") {
 											echo "<option value='" . $day . "'>" . $day . "</option>";
 										}
 										echo "<option value=''>Day</option>";
-
 										for ($x = 1; $x <= 31; $x++) {
 											if (strlen($x) == 1) {
 												$x = "0" . $x;
@@ -371,11 +468,11 @@ $(document).ready(function(){
     		</select>
 			</div>
 			<div class="input-group-2 col-box-4">
-			<select style="padding:5px;" class="group-item group-item-md" title="Month" id="M">
+			<select style="padding:5px;" class="group-item group-item-md" title="<?= $_months ?>" id="M">
         			<?php
 										$idbls = array(1 => "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec");
 										$idblf = array(1 => "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December");
-										$month = explode("/", $idhr)[0];
+										$month = isset($idhr_parts[0]) ? $idhr_parts[0] : '';
 										$month1 = substr($idbl, 0, 3);
 
 										if ($month != "") {
@@ -394,9 +491,9 @@ $(document).ready(function(){
     		</select>
 			</div>
 			<div class="input-group-2 col-box-3">
-			<select style="padding:5px;" class="group-item group-item-md" title="Year" id="Y">
+			<select style="padding:5px;" class="group-item group-item-md" title="<?= $_years ?>" id="Y">
         			<?php
-										$year = explode("/", $idhr)[2];
+										$year = isset($idhr_parts[2]) ? $idhr_parts[2] : '';
 										$year1 = substr($idbl, 3, 4);
 
 										if ($year != "") {
@@ -405,7 +502,6 @@ $(document).ready(function(){
 											echo "<option>" . $year1 . "</option>";
 										}
 											echo "<option>" . date("Y") . "</option>";
-										
 										for ($Y = 2018; $Y <= date("Y"); $Y++) {
 											if ($Y == date("Y")) {
 											} else {
@@ -419,7 +515,6 @@ $(document).ready(function(){
 				<div style="padding:3.5px;"  class="group-item group-item-r text-center pointer" onclick="filterR(); loader();"><i class="fa fa-search"></i> Filter</div>
 			</div>
 			<script type="text/javascript">
-				
 				function filterR(){
 					var D = document.getElementById('D').value;
 					var M = document.getElementById('M').value;
@@ -431,7 +526,6 @@ $(document).ready(function(){
 					}else if(D === ""){
 						window.location='./?report=selling&idbl='+M+Y+'&prefix='+X+'&session=<?= $session; ?>';
 					}
-					
 				}
 			</script>
 		</div>
@@ -441,7 +535,7 @@ $(document).ready(function(){
 				<tr>
 				  <th colspan=5 ><?= $_selling_report ?> <?= $filedownload . $fprefix; ?><b style="font-size:0;">,,,,</b></th>
 				  <th style="text-align:right;"><?= $_total ?></th>
-				  <th style="text-align:right;" id="total"></th>
+				  <th style="text-align:right;"><?= $fmt($sumPrice); ?></th>
 				</tr>
 				<tr>
 				  <th >&#8470;</th>
@@ -455,87 +549,72 @@ $(document).ready(function(){
 				</thead>
 				<tbody>
 				<?php
-			if ($prefix != "") {
-				for ($i = 0; $i < $TotalReg; $i++) {
-					$getname = explode("-|-", $getData[$i]['name']);
-					if (substr($getname[2], 0, strlen($prefix)) == $prefix) {
-						echo "<tr>";
-						echo "<td>";
-						$tgl = $getname[0];
-						echo $tgl;
-						echo "</td>";
-						echo "<td>";
-						$ltime = $getname[1];
-						echo $ltime;
-						echo "</td>";
-						echo "<td>";
-						$username = $getname[2];
-						echo $username;
-						echo "</td>";
-						echo "<td>";
-						$profile = $getname[7];
-						echo $profile;
-						echo "</td>";
-						echo "<td>";
-						$comment = $getname[8];
-						echo $comment;
-						echo "</td>";
-						echo "<td style='text-align:right;'>";
-						$price = $getname[3];
-						echo $price;
-						echo "</td>";
-						echo "</tr>";
-					}
-				}
-			} else {
-				for ($i = 0; $i < $TotalReg; $i++) {
-					$getname = explode("-|-", $getData[$i]['name']);
-					echo "<tr>";
-					echo "<td>";
-					$tgl = $getname[0];
-					echo $tgl;
-					echo "</td>";
-					echo "<td>";
-					$ltime = $getname[1];
-					echo $ltime;
-					echo "</td>";
-					echo "<td>";
-					$username = $getname[2];
-					echo $username;
-					echo "</td>";
-					echo "<td>";
-					$profile = $getname[7];
-					echo $profile;
-					echo "</td>";
-					echo "<td>";
-					$comment = $getname[8];
-					echo $comment;
-					echo "</td>";
-					echo "<td style='text-align:right;'>";
-					$price = $getname[3];
-					echo $price;
-					echo "</td>";
-					echo "</tr>";
-				
-				$dataresume .= $getname[0].$getname[3];
-				$totalresume += $getname[3];
-				}
-				// Write the session summary once, after the loop. Assigning inside
-				// the loop copies the growing string on every iteration (O(n^2)).
-				$_SESSION['dataresume'] = $dataresume;
-				$_SESSION['totalresume'] = $TotalReg.'/'.$totalresume;
-					
+			for ($i = 0; $i < $pageCount; $i++) {
+				$getname = mikhmon_script_parse(isset($getData[$i]['name']) ? (string)$getData[$i]['name'] : '');
+				echo "<tr>";
+				echo "<td>" . (($page - 1) * $per_page + $i + 1) . "</td>";
+				echo "<td>" . $getname[0] . "</td>";
+				echo "<td>" . $getname[1] . "</td>";
+				echo "<td>" . $getname[2] . "</td>";
+				echo "<td>" . $getname[7] . "</td>";
+				echo "<td>" . $getname[8] . "</td>";
+				echo "<td style='text-align:right;'>" . $getname[3] . "</td>";
+				echo "</tr>";
 			}
-
 			?>
 			</tbody>
 			</table>
 		</div>
+		<div class="row" style="padding:6px 4px 0 4px;">
+			<div class="col-6" style="text-align:left;">
+				Halaman <?= $page ?> dari <?= $totalPages ?> &nbsp;|&nbsp;
+				<?= number_format($TotalReg, 0, ',', '.'); ?> transaksi &nbsp;|&nbsp;
+				Sumber data: <b><?= $use_router ? 'Mikrotik' : 'Database'; ?></b>
+			</div>
+			<div class="col-6" style="text-align:right;">
+				<?php
+				if ($page > 1) {
+					echo '<a class="btn bg-primary" href="./?' . $page_query . '&page=' . ($page - 1) . '">&laquo; Prev</a>';
+				}
+				$startPage = max(1, $page - 2);
+				$endPage = min($totalPages, $page + 2);
+				for ($p = $startPage; $p <= $endPage; $p++) {
+					echo '<a class="btn ' . ($p == $page ? 'bg-primary' : 'bg-grey') . '" href="./?' . $page_query . '&page=' . $p . '">' . $p . '</a>';
+				}
+				if ($page < $totalPages) {
+					echo '<a class="btn bg-primary" href="./?' . $page_query . '&page=' . ($page + 1) . '">Next &raquo;</a>';
+				}
+				?>
+			</div>
+		</div>
+</div>
 </div>
 </div>
 </div>
 
-<!-- Modal -->
+<!-- Import modal -->
+<div class="modal-window" id="importModal" aria-hidden="true">
+  <div>
+  	<header><h1><i class="fa fa-upload"></i> Import Data Penjualan</h1></header>
+  	<a style="font-weight:bold;" href="#" title="Close" class="modal-close" onclick="importPause();">X</a>
+	<p>
+		<span id="impInfo">Memuat status...</span>
+		<div style="margin:10px 0; background:#E9EBEE; border-radius:5px; overflow:hidden; height:20px;">
+			<div id="impBar" style="width:0%; background:#4dbd74; height:20px; color:#fff; text-align:center; font-size:12px; line-height:20px;">0%</div>
+		</div>
+		<label style="font-weight:normal; display:block; margin-bottom:8px;">
+			<input type="checkbox" id="impDelete"> Hapus script penjualan di Mikrotik setelah berhasil di-import (hati-hati)
+		</label>
+		<div>
+			<button type="button" class="btn bg-primary" id="impStartBtn" onclick="importStart();">Mulai Import</button>
+			<button type="button" class="btn bg-warning" id="impPauseBtn" style="display:none;" onclick="importPause();">Jeda</button>
+			<button type="button" class="btn bg-primary" id="impResumeBtn" style="display:none;" onclick="importResume();">Lanjutkan</button>
+		</div>
+	</p>
+  </div>
+</div>
+
+<!-- Modal delete data -->
 <div class="modal-window" id="remdata" aria-hidden="true">
   <div>
   	<header><h1><?= $_confirm ?></h1></header>
