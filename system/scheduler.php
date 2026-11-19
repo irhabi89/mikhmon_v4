@@ -35,76 +35,77 @@ if (!isset($_SESSION["mikhmon"])) {
 <div class="col-12">
 <div class="card">
 <div class="card-header">
-	<h3><i class=" fa fa-clock-o"></i> System Scheduler 
+	<h3><i class=" fa fa-clock-o"></i> System Scheduler
 <?php
-if ($countsch < 2) {
-	echo "$countsch item";
-} elseif ($countsch > 1) {
+if ($countsch == 0) {
+	echo "0 items";
+} elseif ($countsch == 1) {
+	echo "1 item";
+} else {
 	echo "$countsch items";
-};
-echo "</th>";
+}
 ?>
-&nbsp;&nbsp; | &nbsp;&nbsp;<i onclick="location.reload();" class="fa fa-refresh pointer" title="Reload data"></i>
-    </h3>
+	&nbsp;&nbsp; | &nbsp;&nbsp;<i onclick="location.reload();" class="fa fa-refresh pointer" title="Reload data"></i>
+	</h3>
 </div>
-<div class="card-body">	   
-<div class="w-6">
-    <input id="filterTable" type="text" class="form-control" placeholder="Search..">
-  </div>
-<div class="overflow box-bordered mr-t-10" style="max-height: 75vh">   	   
-<table id="dataTable" class="table table-bordered table-hover text-nowrap">
-  <thead>
-  <tr>
-  	<th></th>
-    <th class="pointer" title="Click to sort"><i class="fa fa-sort"></i> Name</th>
-    <th class="pointer" title="Click to sort"><i class="fa fa-sort"></i> Start Date</th>
-    <th class="pointer" title="Click to sort"><i class="fa fa-sort"></i> Start Time</th>
-    <th class="pointer" title="Click to sort"><i class="fa fa-sort"></i> Interval</th>
-    <th class="pointer" title="Click to sort"><i class="fa fa-sort"></i> Next Run</th>
-		<th class="pointer" title="Click to sort"><i class="fa fa-sort"></i> Run Count</th>
-    <th class="pointer" title="Click to sort"><i class="fa fa-sort"></i> Comment</th>
-  </tr>
-  </thead>
-  <tbody> 
+<div class="card-body">
+	<div class="w-6">
+		<input id="filterTable" type="text" class="form-control" placeholder="Search..">
+	</div>
+	<div class="overflow box-bordered mr-t-10" style="max-height: 75vh">
+		<table id="dataTable" class="table table-bordered table-hover text-nowrap">
+			<thead>
+				<tr>
+					<th style="width: 90px;"></th>
+					<th><i class="fa fa-sort"></i> Name</th>
+					<th><i class="fa fa-sort"></i> Start Date</th>
+					<th><i class="fa fa-sort"></i> Start Time</th>
+					<th><i class="fa fa-sort"></i> Interval</th>
+					<th><i class="fa fa-sort"></i> Next Run</th>
+					<th><i class="fa fa-sort"></i> Run Count</th>
+					<th><i class="fa fa-sort"></i> Status</th>
+					<th><i class="fa fa-sort"></i> Comment</th>
+				</tr>
+			</thead>
+			<tbody>
 <?php
-for ($i = 0; $i < $TotalReg; $i++) {
-	$sch = $getsch[$i];
-	$id = $sch['.id'];
-	$name = $sch['name'];
-	$startd = $sch['start-date'];
-	$startt = $sch['start-time'];
-	$interval = formatInterval($sch['interval']);
-	$nextrun = $sch['next-run'];
-	$runcount = $sch['run-count'];
-	$comment = $sch['comment'];
-	$disabled = $sch['disabled'];
+			for ($i = 0; $i < $TotalReg; $i++) {
+				$sch = $getsch[$i];
+				$id = $sch['.id'];
+				$name = $sch['name'];
+				$startd = $sch['start-date'];
+				$startt = $sch['start-time'];
+				$interval = formatInterval($sch['interval']);
+				$nextrun = $sch['next-run'];
+				$runcount = $sch['run-count'];
+				$comment = $sch['comment'];
+				$disabled = $sch['disabled'];
 
-	echo "<tr>";
-	?>
-  	<td style='text-align:center;'><i class='fa fa-minus-square text-danger pointer' onclick="if(confirm('Are you sure to delete scheduler (<?= $name; ?>)?')){loadpage('./?remove-scheduler=<?= $id; ?>&session=<?= $session; ?>')}else{}" title='Remove <?= $name; ?>'></i>&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp
-  	<?php
-
-		if ($disabled == "true") {
-			$uriprocess = "'./?enable-scheduler=" . $id . "&session=" . $session . "'";
-			echo "<span class='text-warning pointer' title='Enable Scheduler " . $name . "'  onclick=loadpage(".$uriprocess.")><i class='fa fa-lock '></i></span></td>";
-		} else {
-			$uriprocess = "'./?disable-scheduler=" . $id . "&session=" . $session . "'";
-			echo "<span  class='pointer' title='Disable Scheduler " . $name . "'  onclick=loadpage(".$uriprocess.")><i class='fa fa-unlock '></i></span></td>";
-		}
-		echo "<td>" . $name . "</td>";
-		echo "<td>" . $startd . "</td>";
-		echo "<td>" . $startt . "</td>";
-		echo "<td>" . $interval . "</td>";
-		echo "<td>" . $nextrun . "</a></td>";
-		echo "<td>" . $runcount . "</a></td>";
-		echo "<td>" . $comment . "</a></td>";
-		echo "</tr>";
-	}
-	?>
-  </tbody>
-</table>
+				echo "<tr>";
+				echo "<td style='text-align:center;'>";
+				echo "<i class='fa fa-trash-o text-danger pointer' title='Remove $name' onclick=\"if(confirm('Are you sure to delete scheduler ($name)?')){loadpage('./?remove-scheduler=$id&session=$session')}\"></i>";
+				echo "</td>";
+				echo "<td>" . $name . "</td>";
+				echo "<td>" . $startd . "</td>";
+				echo "<td>" . $startt . "</td>";
+				echo "<td>" . $interval . "</td>";
+				echo "<td>" . $nextrun . "</td>";
+				echo "<td>" . $runcount . "</td>";
+				if ($disabled == "true") {
+					echo "<td><span class='text-warning pointer' title='Enable Scheduler $name' onclick=\"loadpage('./?enable-scheduler=$id&session=$session')\"><i class='fa fa-play'></i> Disabled</span></td>";
+				} else {
+					echo "<td><span class='text-success pointer' title='Disable Scheduler $name' onclick=\"loadpage('./?disable-scheduler=$id&session=$session')\"><i class='fa fa-pause'></i> Active</span></td>";
+				}
+				echo "<td>" . $comment . "</td>";
+				echo "</tr>";
+			}
+?>
+			</tbody>
+		</table>
+	</div>
 </div>
-</div>
+<div class="card-footer">
+	<small>Scheduler yang dimuat dari RouterOS</small>
 </div>
 </div>
 </div>

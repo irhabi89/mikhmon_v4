@@ -155,18 +155,9 @@ if ($id == "login" || substr($url, -1) == "p") {
   include_once('./process/shutdown.php');
 } elseif ($id == "remove-session" && $session != "") {
   include_once('./include/menu.php');
-  $fc = file("./include/config.php" );
-  $f = fopen("./include/config.php", "w");
-  $q = "'";
-  $rem = '$data['.$q.$session.$q.']';
-  foreach ($fc as $line) {
-    if (!strstr($line, $rem))
-      fputs($f, $line);
-  }
-  fclose($f);
-  if (function_exists('mikhmon_cache_invalidate')) {
-    mikhmon_cache_invalidate(__DIR__ . '/include/config.php');
-  }
+  // Mikhmon v3.21+: remove the session from SQLite (Phase 4 of the
+  // storage migration); include/config.php is only a legacy fallback.
+  mikhmon_session_delete((string)$session);
   echo "<script>window.location='./admin.php?id=sessions'</script>";
 } elseif ($id == "about") {
   include_once('./include/menu.php');

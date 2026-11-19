@@ -35,6 +35,7 @@ include('../lang/'.$langid.'.php');
 // load config
   include('../include/config.php');
   include('../include/readcfg.php');
+  include_once('../include/mikhmon_records.php');
 
 // routeros api
   include_once('../lib/routeros_api.class.php');
@@ -63,15 +64,9 @@ include('../lang/'.$langid.'.php');
     $idhr = $thisM . "/" . $thisD . "/" . $thisY;
     $idbl = $thisM . $thisY;
 
-    // RouterOS 7.24+ sets owner=*sys when added by internal hotspot daemon; normalize to current month
-    $sys_reports = $API->comm("/system/script/print", array("?comment" => "mikhmon", "?owner" => "*sys"));
-    if (!empty($sys_reports) && is_array($sys_reports) && !isset($sys_reports['!trap'])) {
-      foreach ($sys_reports as $sr) {
-        if (isset($sr['.id'])) {
-          $API->comm("/system/script/set", array(".id" => $sr['.id'], "owner" => "$idbl"));
-        }
-      }
-    }
+    // New sales are recorded on the router via profile on-login scripts;
+    // sync new records into the DB (sales_records).
+    mikhmon_sales_sync($API, $session);
 
     $_SESSION[$session.'idhr'] = $idhr;
 
@@ -80,9 +75,7 @@ include('../lang/'.$langid.'.php');
     ));
     $TotalRHr = count($getSRHr);
     $_SESSION[$session.'totalHr'] = $TotalRHr;*/
-    $getSRBl = $API->comm("/system/script/print", array(
-      "?owner" => "$idbl",
-    ));
+    $getSRBl = mikhmon_sales_find($session, null, $idbl);
     $TotalRBl = count($getSRBl);
     $_SESSION[$session.'totalBl'] = $TotalRBl;
 /*

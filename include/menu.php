@@ -312,14 +312,13 @@ if (file_exists('./info.php')) { include('./info.php'); }
   <select class="connect optfa ses text-right mr-t-10 pd-5">
     <option id="MikhmonSession" value="<?= $session; ?>"><?= $hotspotname; ?></option>
       <?php
-      foreach (file('./include/config.php') as $line) {
-        $ses_parts = explode("'", $line);
-        $sesname = isset($ses_parts[1]) ? $ses_parts[1] : '';
+      foreach (mikhmon_sessions_all() as $sesname) {
+        $sesname = (string)$sesname;
         if ($sesname == "" || $sesname == "mikhmon") {
         } else {
-          $ip_parts = (isset($data[$sesname]) && isset($data[$sesname][1])) ? explode('!', $data[$sesname][1]) : array();
-          $ip_val = isset($ip_parts[1]) ? trim($ip_parts[1]) : '';
-          if (($sesname === "new" || preg_match('/^new-[0-9]+$/', (string)$sesname)) && $ip_val === "") {
+          $ses_row = mikhmon_session_get($sesname);
+          $ip_val = is_array($ses_row) ? trim((string)$ses_row['ip_host']) : '';
+          if (($sesname === "new" || preg_match('/^new-[0-9]+$/', $sesname)) && $ip_val === "") {
             continue;
           }
           if($sesname == $session){

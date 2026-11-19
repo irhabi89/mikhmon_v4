@@ -38,19 +38,15 @@ if (!isset($_SESSION["mikhmon"])) {
 	
 
 	include_once('./include/timezone.php');
+	include_once('./include/mikhmon_records.php');
 	$gettimezone = $API->comm("/system/clock/print");
 	$timezone = mikhmon_timezone_from_clock(isset($gettimezone[0]) ? $gettimezone[0] : array());
 	date_default_timezone_set($timezone);
 
-	// RouterOS 7.24+ sets owner=*sys when added by internal hotspot daemon; normalize to current month
-	$sys_reports = $API->comm("/system/script/print", array("?comment" => "mikhmon", "?owner" => "*sys", ".proplist" => ".id"));
-	if (!empty($sys_reports) && is_array($sys_reports) && !isset($sys_reports['!trap'])) {
-		$cur_month = strtolower(date("M")) . date("Y");
-		foreach ($sys_reports as $sr) {
-			if (isset($sr['.id'])) {
-				$API->comm("/system/script/set", array(".id" => $sr['.id'], "owner" => "$cur_month"));
-			}
-		}
+	if ($API->connect($iphost, $userhost, decrypt($passwdhost))) {
+		// New sales are recorded on the router via profile on-login scripts;
+		// sync new records into the DB (sales_records).
+		mikhmon_sales_sync($API, $session);
 	}
 
 	if (isset($remdata)) {
@@ -82,6 +78,38 @@ if (!isset($_SESSION["mikhmon"])) {
 			}
 
 		}
+		// Mikhmon v3.21+: sales data lives in the DB; delete it there and
+		// best-effort delete the corresponding scripts on the router.
+		if (strlen($idhr) > "0") {
+			mikhmon_sales_delete($session, $idhr);
+		} elseif (strlen($idbl) > "0") {
+			mikhmon_sales_delete($session, null, $idbl);
+		}
+		if ($API->connect($iphost, $userhost, decrypt($passwdhost))) {
+			foreach (mikhmon_scripts_all($API) as $r) {
+				if (!isset($r['name'])) {
+					continue;
+				}
+				$matched = ($idbl != "" && mikhmon_script_month((string)$r['name']) === (string)$idbl)
+					|| ($idhr != "" && mikhmon_script_parse((string)$r['name'])[0] === (string)$idhr);
+				if (!$matched) {
+					continue;
+				}
+				$ids = $API->comm("/system/script/print", array(
+					"?comment" => "mikhmon",
+					"?name" => $r['name'],
+					".proplist" => ".id",
+				));
+				foreach ($ids as $idRow) {
+					if (!isset($idRow['.id'])) {
+						continue;
+					}
+					$API->write('/system/script/remove', false);
+					$API->write('=.id=' . $idRow['.id']);
+					$API->read();
+				}
+			}
+		}
 		echo "<script>window.location='./?report=selling&session=" . $session . "'</script>";
 	}
 
@@ -92,33 +120,39 @@ if (!isset($_SESSION["mikhmon"])) {
 	}
 	if (strlen($idhr) > "0") {
 		if ($API->connect($iphost, $userhost, decrypt($passwdhost))) {
-			$getData = $API->comm("/system/script/print", array(
-				"?source" => "$idhr",
-				".proplist" => "name",
-			));
-			$TotalReg = count($getData);
+			$getData = mikhmon_sales_find($session, $idhr);
+			$TotalReg = mikhmon_count_rows($getData);
+			if ($TotalReg == 0) {
+				// Fallback: RouterOS 7-style date ("2026-11-19") in the record
+				// name vs legacy $idhr ("nov/19/2026").
+				$v7date = date('Y-m-d', strtotime((string)$idhr));
+				$getData = array();
+				foreach (mikhmon_sales_find($session) as $r) {
+					if (isset($r['name'])) {
+						$d = mikhmon_script_parse((string)$r['name'])[0];
+						if ($d === (string)$idhr || $d === $v7date) {
+							$getData[] = $r;
+						}
+					}
+				}
+				$TotalReg = count($getData);
+			}
 		}
 		$filedownload = $idhr;
 		$shf = "hidden";
 		$shd = "inline-block";
 	} elseif (strlen($idbl) > "0") {
 		if ($API->connect($iphost, $userhost, decrypt($passwdhost))) {
-			$getData = $API->comm("/system/script/print", array(
-				"?owner" => "$idbl",
-				".proplist" => "name",
-			));
-			$TotalReg = count($getData);
+			$getData = mikhmon_sales_find($session, null, $idbl);
+			$TotalReg = mikhmon_count_rows($getData);
 		}
 		$filedownload = $idbl;
 		$shf = "hidden";
 		$shd = "inline-block";
 	} elseif ($idhr == "" || $idbl == "") {
 		if ($API->connect($iphost, $userhost, decrypt($passwdhost))) {
-			$getData = $API->comm("/system/script/print", array(
-				"?comment" => "mikhmon",
-				".proplist" => "name",
-			));
-			$TotalReg = count($getData);
+			$getData = mikhmon_sales_find($session);
+			$TotalReg = mikhmon_count_rows($getData);
 		}
 		$filedownload = "all";
 		$shf = "text";

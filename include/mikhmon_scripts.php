@@ -35,7 +35,7 @@ function mikhmon_v3_onlogin_script($expmode, $price, $validity, $sprice, $getloc
 }
 :local legacy "$monthname/$day/$year";
 :local comment [ /ip hotspot user get [ /ip hotspot user find where name="$user" ] comment ];
-:local ucode [:pic $comment 0 2];
+:local ucode [:pick $comment 0 2];
 :if ($ucode = "vc" or $ucode = "up" or $comment = "") do={
   /sys sch add name="$user" disable=no start-date=$date interval="{{validity}}";
   :delay 2s;
@@ -46,16 +46,16 @@ function mikhmon_v3_onlogin_script($expmode, $price, $validity, $sprice, $getloc
     :set expLegacy "$legacy $exp";
   } else={
     :if ($getxp = 15) do={
-      :local d [:pic $exp 0 6];
-      :local t [:pic $exp 7 16];
+      :local d [:pick $exp 0 6];
+      :local t [:pick $exp 7 16];
       :set expLegacy "$d/$year $t";
     } else={
       :if ([:pick $exp 4 5] = "-") do={
-        :local ey [:pic $exp 0 4];
-        :local ed [:pic $exp 8 10];
-        :local mnum2 [:tonum [:pic $exp 5 7]];
+        :local ey [:pick $exp 0 4];
+        :local ed [:pick $exp 8 10];
+        :local mnum2 [:tonum [:pick $exp 5 7]];
         :local emn [:pick $mnames (($mnum2 - 1) * 3) (($mnum2 - 1) * 3 + 3)];
-        :local et [:pic $exp 11 [:len $exp]];
+        :local et [:pick $exp 11 [:len $exp]];
         :set expLegacy "$emn/$ed/$ey $et";
       } else={
         :set expLegacy $exp;

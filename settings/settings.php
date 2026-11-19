@@ -30,36 +30,33 @@ if (!isset($_SESSION["mikhmon"])) {
     // prevents duplicate "new-XXXX" entries when the browser reloads the page.
     $new_session = preg_replace('/[^A-Za-z0-9_-]/', '', $router);
     if ($new_session != '') {
-      $config_file = __DIR__ . '/../include/config.php';
-      $config_line = "\n\$data['" . $new_session . "'] = array ('1'=>'" . $new_session . "!','" . $new_session . "@|@','" . $new_session . "#|#','" . $new_session . "%','" . $new_session . "^','" . $new_session . "&Rp','" . $new_session . "*10','" . $new_session . "(1','" . $new_session . ")','" . $new_session . "=10','" . $new_session . "@!@disable');";
-      // Lock the config and clean up any previous empty drafts, then add
-      // the new session line so rapid reloads/double clicks never create duplicates.
-      $fp = @fopen($config_file, 'c+');
-      if ($fp) {
-        @flock($fp, LOCK_EX);
-        $current_config = stream_get_contents($fp);
-        $lines = explode("\n", $current_config);
-        $clean_lines = array();
-        foreach ($lines as $ln) {
-          $tln = trim($ln);
-          // Drop any previous empty new/new-XXXX draft entries
-          if ($tln !== '' && preg_match('/^\$data\[\'(new|new-[0-9]+)\'\]\s*=\s*array\s*\(\s*\'1\'=>\'(new|new-[0-9]+)\!\'/i', $tln)) {
-            continue;
+      // Mikhmon v3.21+: register the new session in SQLite; delete other
+      // abandoned "new"/"new-N" drafts so rapid reloads/double clicks
+      // never create duplicates.
+      foreach (mikhmon_sessions_all() as $n) {
+        $n = (string)$n;
+        if ($n !== $new_session && preg_match('/^(new|new-[0-9]+)$/', $n)) {
+          $draft = mikhmon_session_get($n);
+          if ($draft === null || (is_array($draft) && ($draft['ip_host'] ?? '') === '')) {
+            mikhmon_session_delete($n);
           }
-          $clean_lines[] = $ln;
         }
-        $current_config = implode("\n", $clean_lines);
-        if (strpos($current_config, "\$data['" . $new_session . "']") === false) {
-          $current_config = rtrim($current_config) . "\n" . $config_line . "\n";
-        }
-        @ftruncate($fp, 0);
-        @rewind($fp);
-        @fwrite($fp, $current_config);
-        @flock($fp, LOCK_UN);
-        @fclose($fp);
-        if (function_exists('mikhmon_cache_invalidate')) {
-          mikhmon_cache_invalidate($config_file);
-        }
+      }
+      if (mikhmon_session_get($new_session) === null) {
+        mikhmon_session_upsert(array(
+          'name' => $new_session,
+          'ip_host' => '',
+          'user_host' => '',
+          'pass_host' => '',
+          'hotspot_name' => '',
+          'dns_name' => '',
+          'currency' => 'Rp',
+          'areload' => '10',
+          'iface' => '1',
+          'infolp' => '',
+          'idleto' => '10',
+          'live_report' => 'disable',
+        ));
       }
     }
     while (ob_get_level() > 0) {
@@ -97,21 +94,28 @@ if (!isset($_SESSION["mikhmon"])) {
     $sesname = (preg_replace('/\s+/', '-', $_POST['sessname']));
     $slivereport = ($_POST['livereport']);
 
-    $search = array('1' => "$session!$iphost", "$session@|@$userhost", "$session#|#$passwdhost", "$session%$hotspotname", "$session^$dnsname", "$session&$currency", "$session*$areload", "$session($iface", "$session)$infolp", "$session=$idleto", "'$session'", "$session@!@$livereport");
-
-    $replace = array('1' => "$sesname!$siphost", "$sesname@|@$suserhost", "$sesname#|#$spasswdhost", "$sesname%$shotspotname", "$sesname^$sdnsname", "$sesname&$scurrency", "$sesname*$sreload", "$sesname($siface", "$sesname)$sinfolp", "$sesname=$sidleto", "'$sesname'", "$sesname@!@$slivereport");
-
-    // Apply all replacements in memory and write the file once. The previous
-    // loop rewrote config.php on every iteration, which was slow and widened
-    // the race window for concurrent requests.
-    $content = file_get_contents("./include/config.php");
-    for ($i = 1, $n = count($search); $i <= $n; $i++) {
-      $content = str_replace((string)$search[$i], (string)$replace[$i], $content);
+    
+    // Mikhmon v3.21+: write the session to SQLite (Phase 4 of the
+    // storage migration); include/config.php is only a legacy fallback.
+    $row = mikhmon_session_get((string)$session);
+    if ($row && $sesname !== $session) {
+      // Rename: remove the old session name.
+      mikhmon_session_delete((string)$session);
     }
-    file_put_contents("./include/config.php", $content, LOCK_EX);
-    if (function_exists('mikhmon_cache_invalidate')) {
-      mikhmon_cache_invalidate(__DIR__ . '/../include/config.php');
-    }
+    mikhmon_session_upsert(array(
+      'name' => (string)$sesname,
+      'ip_host' => $siphost,
+      'user_host' => $suserhost,
+      'pass_host' => $spasswdhost,
+      'hotspot_name' => $shotspotname,
+      'dns_name' => $sdnsname,
+      'currency' => $scurrency,
+      'areload' => $sreload,
+      'iface' => $siface,
+      'infolp' => $sinfolp,
+      'idleto' => $sidleto,
+      'live_report' => $slivereport,
+    ));
     $_SESSION["connect"] = "";
     if (!empty($_POST['connect_after_save'])) {
       echo "<script>window.location='./admin.php?id=connect&session=" . $sesname . "&c=settings'</script>";
@@ -121,7 +125,7 @@ if (!isset($_SESSION["mikhmon"])) {
   }
   // Do not bounce away when no session is selected yet (Add Router flow) or when
   // the session is still unsaved; the form itself lets the user fill the currency.
-  if ($currency === "" && !empty($session) && isset($data[$session]) && isset($_POST['save'])) {
+  if ($currency === "" && !empty($session) && (isset($data[$session]) || mikhmon_session_get((string)$session) !== null) && isset($_POST['save'])) {
     echo "<script>window.location='./admin.php?id=settings&session=" . $session . "'</script>";
   }
 }

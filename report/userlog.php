@@ -26,37 +26,26 @@ if (!isset($_SESSION["mikhmon"])) {
 	$idbl = isset($_GET['idbl']) ? $_GET['idbl'] : '';
 	$remdata = isset($_POST['remdata']) ? $_POST['remdata'] : null;
 
+	include_once('./include/mikhmon_records.php');
+
+	// New sales are recorded on the router; sync into DB.
+	if ($API->connect($iphost, $userhost, decrypt($passwdhost))) {
+		mikhmon_sales_sync($API, $session);
+		$API->disconnect();
+	}
 
 	if (strlen($idhr) > "0") {
-		if ($API->connect($iphost, $userhost, decrypt($passwdhost))) {
-			$API->write('/system/script/print', false);
-			$API->write('?=source=' . $idhr . '', false);
-			$API->write('=.proplist=name');
-			$ARRAY = $API->read();
-			$API->disconnect();
-		}
+		$ARRAY = mikhmon_sales_find($session, $idhr);
 		$filedownload = $idhr;
 		$shf = "hidden";
 		$shd = "text";
 	} elseif (strlen($idbl) > "0") {
-		if ($API->connect($iphost, $userhost, decrypt($passwdhost))) {
-			$API->write('/system/script/print', false);
-			$API->write('?=owner=' . $idbl . '', false);
-			$API->write('=.proplist=name');
-			$ARRAY = $API->read();
-			$API->disconnect();
-		}
+		$ARRAY = mikhmon_sales_find($session, null, $idbl);
 		$filedownload = $idbl;
 		$shf = "hidden";
 		$shd = "text";
 	} elseif ($idhr == "" || $idbl == "") {
-		if ($API->connect($iphost, $userhost, decrypt($passwdhost))) {
-			$API->write('/system/script/print', false);
-			$API->write('?=comment=mikhmon', false);
-			$API->write('=.proplist=name');
-			$ARRAY = $API->read();
-			$API->disconnect();
-		}
+		$ARRAY = mikhmon_sales_find($session);
 		$filedownload = "all";
 		$shf = "text";
 		$shd = "hidden";

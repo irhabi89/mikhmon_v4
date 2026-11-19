@@ -32,17 +32,9 @@ if (!isset($_SESSION["mikhmon"])) {
     $logobt = ($_POST['logobt']);
     $qrbt = ($_POST['qrbt']);
 
-    $cari = array('1' => "mikhmon<|<$useradm", "mikhmon>|>$passadm");
-    $ganti = array('1' => "mikhmon<|<$suseradm", "mikhmon>|>$spassadm");
-
-    $content = file_get_contents("./include/config.php");
-    for ($i = 1, $n = count($cari); $i <= $n; $i++) {
-      $content = str_replace((string)$cari[$i], (string)$ganti[$i], $content);
-    }
-    file_put_contents("./include/config.php", $content, LOCK_EX);
-    if (function_exists('mikhmon_cache_invalidate')) {
-      mikhmon_cache_invalidate(__DIR__ . '/../include/config.php');
-    }
+    // Mikhmon v3.21+: admin credentials live in SQLite (Phase 4 of the
+    // storage migration); include/config.php is only a legacy fallback.
+    mikhmon_admin_set((string)$suseradm, (string)$spassadm);
 
   
   $gen = '<?php $qrbt="' . $qrbt . '";?>';
@@ -81,16 +73,14 @@ if (!isset($_SESSION["mikhmon"])) {
             <div class="card-body">
             <div class="row">
               <?php
-              foreach (file('./include/config.php') as $line) {
-                $line_parts = explode("'", $line);
-                $value = isset($line_parts[1]) ? $line_parts[1] : '';
+              foreach (mikhmon_sessions_all() as $value) {
+                $value = (string)$value;
+                $srow = mikhmon_session_get($value);
                 if ($value == "" || $value == "mikhmon") {
                 } else { 
-                  $hs_parts = (isset($data[$value]) && isset($data[$value][4])) ? explode('%', $data[$value][4]) : array();
-                  $hs_name = isset($hs_parts[1]) ? $hs_parts[1] : '';
-                  $ip_parts = (isset($data[$value]) && isset($data[$value][1])) ? explode('!', $data[$value][1]) : array();
-                  $ip_val = isset($ip_parts[1]) ? trim($ip_parts[1]) : '';
-                  if (($value === "new" || preg_match('/^new-[0-9]+$/', (string)$value)) && $ip_val === "") {
+                  $hs_name = is_array($srow) ? (string)$srow['hotspot_name'] : '';
+                  $ip_val = is_array($srow) ? trim((string)$srow['ip_host']) : '';
+                  if (($value === "new" || preg_match('/^new-[0-9]+$/', $value)) && $ip_val === "") {
                     continue; // Skip abandoned unconfigured placeholder sessions
                   }
                 ?>

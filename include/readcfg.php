@@ -48,24 +48,53 @@ if (!function_exists('mikhmon_cache_invalidate')) {
     }
 }
 
-if (isset($data[$session]) && is_array($data[$session])) {
-    $iphost = isset($data[$session][1]) ? $get_cfg_val($data[$session][1], '!') : '';
-    $userhost = isset($data[$session][2]) ? $get_cfg_val($data[$session][2], '@|@') : '';
-    $passwdhost = isset($data[$session][3]) ? $get_cfg_val($data[$session][3], '#|#') : '';
-    $hotspotname = isset($data[$session][4]) ? $get_cfg_val($data[$session][4], '%') : '';
-    $dnsname = isset($data[$session][5]) ? $get_cfg_val($data[$session][5], '^') : '';
-    $currency = isset($data[$session][6]) ? $get_cfg_val($data[$session][6], '&') : '';
-    $areload = isset($data[$session][7]) ? $get_cfg_val($data[$session][7], '*') : '';
+// --- Session / admin config: SQLite is authoritative; include/config.php ($data) is the fallback. ---
+if (!function_exists('mikhmon_session_get')) {
+    include_once(__DIR__ . '/../lib/mikhmon_db.php');
+    include_once(__DIR__ . '/../lib/sessions_store.php');
+}
+$session = isset($session) ? $session : '';
+$store_session = mikhmon_session_get((string)$session);
+if (is_array($store_session)) {
+    $iphost = isset($store_session['ip_host']) ? $store_session['ip_host'] : '';
+    $userhost = isset($store_session['user_host']) ? $store_session['user_host'] : '';
+    $passwdhost = isset($store_session['pass_host']) ? $store_session['pass_host'] : '';
+    $hotspotname = isset($store_session['hotspot_name']) ? $store_session['hotspot_name'] : '';
+    $dnsname = isset($store_session['dns_name']) ? $store_session['dns_name'] : '';
+    $currency = isset($store_session['currency']) ? $store_session['currency'] : '';
+    $areload = isset($store_session['areload']) ? $store_session['areload'] : '';
     if ($areload === '' || !is_numeric($areload)) {
         $areload = '10';
     }
-    $iface = isset($data[$session][8]) ? $get_cfg_val($data[$session][8], '(') : '';
-    $infolp = isset($data[$session][9]) ? $get_cfg_val($data[$session][9], ')') : '';
-    $idleto = isset($data[$session][10]) ? $get_cfg_val($data[$session][10], '=') : '';
-    $sesname = isset($data[$session][10]) ? $get_cfg_val($data[$session][10], '+') : '';
-    $livereport = isset($data[$session][11]) ? $get_cfg_val($data[$session][11], '@!@') : '';
+    $iface = isset($store_session['iface']) ? $store_session['iface'] : '';
+    $infolp = isset($store_session['infolp']) ? $store_session['infolp'] : '';
+    $idleto = isset($store_session['idleto']) ? $store_session['idleto'] : '';
+    $livereport = isset($store_session['live_report']) ? $store_session['live_report'] : '';
+} elseif (isset($data[$session]) && is_array($data[$session])) {
+    // Legacy fallback while include/config.php still exists.
+    $row = mikhmon_row_from_data((string)$session, $data[$session]);
+    $iphost = $row['ip_host'];
+    $userhost = $row['user_host'];
+    $passwdhost = $row['pass_host'];
+    $hotspotname = $row['hotspot_name'];
+    $dnsname = $row['dns_name'];
+    $currency = $row['currency'];
+    $areload = $row['areload'];
+    $iface = $row['iface'];
+    $infolp = $row['infolp'];
+    $idleto = $row['idleto'];
+    $livereport = $row['live_report'];
+} else {
+    $iphost = $userhost = $passwdhost = $hotspotname = $dnsname = $currency = '';
+    $areload = '10';
+    $iface = $infolp = $idleto = $livereport = '';
 }
-if (isset($data['mikhmon']) && is_array($data['mikhmon'])) {
+
+$store_admin = mikhmon_admin_get();
+if (!empty($store_admin['user'])) {
+    $useradm = $store_admin['user'];
+    $passadm = $store_admin['pass'];
+} elseif (isset($data['mikhmon']) && is_array($data['mikhmon'])) {
     $useradm = isset($data['mikhmon'][1]) ? $get_cfg_val($data['mikhmon'][1], '<|<') : '';
     $passadm = isset($data['mikhmon'][2]) ? $get_cfg_val($data['mikhmon'][2], '>|>') : '';
 }
