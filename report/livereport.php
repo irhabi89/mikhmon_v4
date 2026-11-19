@@ -64,9 +64,11 @@ include('../lang/'.$langid.'.php');
     $idhr = $thisM . "/" . $thisD . "/" . $thisY;
     $idbl = $thisM . $thisY;
 
-    // New sales are recorded on the router via profile on-login scripts;
-    // sync new records into the DB (sales_records).
-    mikhmon_sales_sync($API, $session);
+    // First view of a router that has no data in the DB yet: copy the router
+    // sales records into SQLite so the dashboard income box is never empty.
+    if (mikhmon_sales_count($session) == 0) {
+      mikhmon_sales_sync($API, $session);
+    }
 
     $_SESSION[$session.'idhr'] = $idhr;
 

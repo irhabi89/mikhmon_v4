@@ -28,9 +28,12 @@ if (!isset($_SESSION["mikhmon"])) {
 
 	include_once('./include/mikhmon_records.php');
 
-	// New sales are recorded on the router; sync into DB.
+	// First view of a router that has no data in the DB yet: copy the router
+	// sales records into SQLite so the user log is never empty.
 	if ($API->connect($iphost, $userhost, decrypt($passwdhost))) {
-		mikhmon_sales_sync($API, $session);
+		if (mikhmon_sales_count($session) == 0) {
+			mikhmon_sales_sync($API, $session);
+		}
 		$API->disconnect();
 	}
 

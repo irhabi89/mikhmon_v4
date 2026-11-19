@@ -157,6 +157,15 @@ function mikhmon_sales_sync($API, $session)
         require_once __DIR__ . '/../lib/sessions_store.php';
     }
     $inserted = 0;
+    $db = mikhmon_db();
+    $in_tx = false;
+    if ($db !== false) {
+        try {
+            $in_tx = $db->beginTransaction();
+        } catch (PDOException $e) {
+            $in_tx = false;
+        }
+    }
     $rows = $API->comm("/system/script/print", array("?comment" => "mikhmon", ".proplist" => "name"));
     foreach ($rows as $r) {
         if (!isset($r['name'])) {
@@ -186,6 +195,12 @@ function mikhmon_sales_sync($API, $session)
         ));
         if ($id > 0) {
             $inserted++;
+        }
+    }
+    if ($in_tx) {
+        try {
+            $db->commit();
+        } catch (PDOException $e) {
         }
     }
     return $inserted;

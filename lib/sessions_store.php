@@ -183,11 +183,33 @@ function mikhmon_sales_insert($row)
         'c_profile', 'c_comment');
     $row = array_intersect_key($row, array_flip($allowed));
     try {
-        // Dedupe on (session, ros_script_id): already-imported records are skipped.
-        if (!empty($row['session']) && !empty($row['ros_script_id'])) {
-            $st = $db->prepare('SELECT id FROM sales_records WHERE session = ? AND ros_script_id = ? LIMIT 1');
-            $st->execute(array($row['session'], $row['ros_script_id']));
-            if ($st->fetch(PDO::FETCH_ASSOC)) {
+        // Dedupe on script id or record name: the page-load sync inserts
+        // records without a script id, the importer inserts them with one.
+        $sid = !empty($row['ros_script_id']) ? (string)$row['ros_script_id'] : '';
+        $rname = isset($row['name']) ? (string)$row['name'] : '';
+        if (!empty($row['session']) && ($sid !== '' || $rname !== '')) {
+            $conds = array();
+            $vals = array($row['session']);
+            if ($sid !== '') {
+                $conds[] = 'ros_script_id = ?';
+                $vals[] = $sid;
+            }
+            if ($rname !== '') {
+                $conds[] = 'name = ?';
+                $vals[] = $rname;
+            }
+            $st = $db->prepare('SELECT id, ros_script_id FROM sales_records WHERE session = ? AND ('
+                . implode(' OR ', $conds) . ') LIMIT 1');
+            $st->execute($vals);
+            $ex = $st->fetch(PDO::FETCH_ASSOC);
+            if ($ex) {
+                if ($sid !== '' && empty($ex['ros_script_id'])) {
+                    // Learned the router id for a row inserted by the sync;
+                    // return the id so --delete can clean up the script.
+                    $db->prepare('UPDATE sales_records SET ros_script_id = ? WHERE id = ?')
+                        ->execute(array($sid, $ex['id']));
+                    return (int)$ex['id'];
+                }
                 return 0;
             }
         }
@@ -231,6 +253,22 @@ function mikhmon_sales_find($session, $source = null, $owner = null, $comment = 
         return $st->fetchAll(PDO::FETCH_ASSOC);
     } catch (PDOException $e) {
         return array();
+    }
+}
+
+// Number of sales records stored for a session.
+function mikhmon_sales_count($session)
+{
+    $db = mikhmon_db();
+    if ($db === false) {
+        return 0;
+    }
+    try {
+        $st = $db->prepare('SELECT COUNT(*) FROM sales_records WHERE session = ?');
+        $st->execute(array($session));
+        return (int)$st->fetchColumn();
+    } catch (PDOException $e) {
+        return 0;
     }
 }
 

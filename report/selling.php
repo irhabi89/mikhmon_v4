@@ -44,9 +44,12 @@ if (!isset($_SESSION["mikhmon"])) {
 	date_default_timezone_set($timezone);
 
 	if ($API->connect($iphost, $userhost, decrypt($passwdhost))) {
-		// New sales are recorded on the router via profile on-login scripts;
-		// sync new records into the DB (sales_records).
-		mikhmon_sales_sync($API, $session);
+		// First view of a router that has no data in the DB yet: copy the
+		// router sales records into SQLite so the report is never empty.
+		// Later/new records can be imported with the Import panel below.
+		if (mikhmon_sales_count($session) == 0) {
+			mikhmon_sales_sync($API, $session);
+		}
 	}
 
 	if (isset($remdata)) {
@@ -111,6 +114,30 @@ if (!isset($_SESSION["mikhmon"])) {
 			}
 		}
 		echo "<script>window.location='./?report=selling&session=" . $session . "'</script>";
+	}
+
+	// --- Import sales from the router into the DB (report page UI action) ---
+	$imp_message = '';
+	$imp_error = '';
+	if (isset($_POST['mikhmon_import'])) {
+		include_once('./lib/sales_import.php');
+		set_time_limit(0);
+		@ini_set('memory_limit', '1G');
+		$imp_month = null;
+		if (!empty($_POST['imp_m']) && !empty($_POST['imp_y'])) {
+			$imp_month = strtolower(preg_replace('/[^a-z]/i', '', $_POST['imp_m'])) . preg_replace('/[^0-9]/', '', $_POST['imp_y']);
+		}
+		$imp_res = mikhmon_import_sales_session($session, array(
+			'dry_run' => false,
+			'delete' => (isset($_POST['imp_delete']) && $_POST['imp_delete'] == '1'),
+			'month' => $imp_month,
+		));
+		if (!empty($imp_res['ok'])) {
+			$imp_message = 'Import selesai: ' . (int)$imp_res['imported'] . ' transaksi baru masuk database.'
+				. (!empty($_POST['imp_delete']) ? ' ' . (int)$imp_res['deleted'] . ' script dihapus dari Mikrotik.' : '');
+		} else {
+			$imp_error = 'Import gagal: ' . $imp_res['error'];
+		}
 	}
 
 	if ($prefix != "") {
@@ -293,6 +320,34 @@ $(document).ready(function(){
 		  <button  id="remSelected" style="display: none;" class="btn bg-red" onclick="MikhmonRemoveReportSelected()"><i class="fa fa-trash"></i> <span id="selected"></span> <?= $_selected ?></button>
 		</div>
 	</div>
+	</div>
+	<?php
+	$imp_db_count = function_exists('mikhmon_sales_count') ? mikhmon_sales_count($session) : 0;
+	$imp_months = array(1 => 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec');
+	$imp_month_names = array(1 => 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December');
+	if (!empty($imp_message)) {
+		echo '<div class="bg-green" style="padding:6px;margin-bottom:8px;border-radius:4px;">' . htmlspecialchars($imp_message) . '</div>';
+	}
+	if (!empty($imp_error)) {
+		echo '<div class="bg-danger" style="padding:6px;margin-bottom:8px;border-radius:4px;">' . htmlspecialchars($imp_error) . '</div>';
+	}
+	?>
+	<div class="box-bordered" style="padding:8px;margin-bottom:10px;">
+		<form method="post" action="" style="margin:0;">
+			<i class="fa fa-database"></i> <b>Database: <?= number_format($imp_db_count, 0, ',', '.') ?></b> transaksi tersimpan.
+			&nbsp;|&nbsp; <b>Import dari Mikrotik:</b>
+			<select name="imp_m" style="padding:4px;">
+				<option value="">Semua bulan</option>
+				<?php for ($x = 1; $x <= 12; $x++) { echo '<option value="' . $imp_months[$x] . '">' . $imp_month_names[$x] . '</option>'; } ?>
+			</select>
+			<select name="imp_y" style="padding:4px;">
+				<?php for ($Y = 2018; $Y <= (int)date('Y'); $Y++) { echo '<option value="' . $Y . '"' . ($Y == (int)date('Y') ? ' selected' : '') . '>' . $Y . '</option>'; } ?>
+			</select>
+			<label style="font-weight:normal; margin-left:8px;">
+				<input type="checkbox" name="imp_delete" value="1"> Hapus script penjualan di Mikrotik setelah berhasil (hati-hati)
+			</label>
+			<button type="submit" name="mikhmon_import" value="1" class="btn bg-primary"><i class="fa fa-upload"></i> Import</button>
+		</form>
 	</div>
 		<div class="input-group mr-b-10">
 			<div class="input-group-1 col-box-2">
