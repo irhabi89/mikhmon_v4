@@ -70,10 +70,10 @@ $totalincome = isset($tr_parts[1]) ? $tr_parts[1] : '0';
 
 
 if ($currency == in_array($currency, $cekindo['indo'])) {
-  $totalreport = "Total " . $totalvrc . "vcr : " . $currency . " " . number_format((float)$totalincome, 0, ",", ".");
+  $totalreport = "Total " . $totalvrc . " vcr : " . $currency . " " . number_format((float)$totalincome, 0, ",", ".");
 
 } else {
-  $totalreport = "Total " . $totalvrc . "vcr : " . $currency . " " . number_format((float)$totalincome, 2);
+  $totalreport = "Total " . $totalvrc . " vcr : " . $currency . " " . number_format((float)$totalincome, 2);
 }
 
 
