@@ -3,7 +3,7 @@
  * Mikhmon v3: AJAX endpoint for the report page Import modal.
  * Actions: status, prepare, chunk, delete.
  */
-session_start();
+if (session_status() === PHP_SESSION_NONE) session_start();
 error_reporting(0);
 header('Content-Type: application/json');
 if (!isset($_SESSION['mikhmon'])) {

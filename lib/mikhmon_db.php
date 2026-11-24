@@ -82,6 +82,8 @@ CREATE TABLE IF NOT EXISTS sales_records (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS sales_records_script
   ON sales_records(session, ros_script_id) WHERE ros_script_id != '';
+CREATE UNIQUE INDEX IF NOT EXISTS sales_records_session_name ON sales_records(session, name);
+CREATE INDEX IF NOT EXISTS sales_records_session_source ON sales_records(session, source);
 CREATE INDEX IF NOT EXISTS sales_records_session_owner ON sales_records(session, owner);
 CREATE INDEX IF NOT EXISTS sales_records_session_date ON sales_records(session, c_date);
 CREATE TABLE IF NOT EXISTS sales_import_queue (

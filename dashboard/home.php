@@ -78,6 +78,19 @@ if (!isset($_SESSION["mikhmon"])) {
   } else {
     $logh = "350px";
     $lreport = "style='display:block;'";
+    // Pre-calculate income directly from SQLite DB (DB-first, instantaneous <0.04s)
+    include_once('./include/mikhmon_records.php');
+    include_once('./lib/sessions_store.php');
+    $stats_home = mikhmon_sales_stats($session);
+    $indo_currencies = (isset($cekindo['indo']) && is_array($cekindo['indo']))
+      ? $cekindo['indo']
+      : array('RP', 'Rp', 'rp', 'IDR', 'idr', 'RP.', 'Rp.', 'rp.', 'IDR.', 'idr.');
+    $price_decimals = in_array((string)(isset($currency) ? $currency : 'Rp'), $indo_currencies) ? 0 : 2;
+    $_SESSION[$session.'totalHr'] = $stats_home['today_count'];
+    $_SESSION[$session.'dincome'] = number_format($stats_home['today_sum'], $price_decimals, ',', '.');
+    $_SESSION[$session.'totalBl'] = $stats_home['month_count'];
+    $_SESSION[$session.'mincome'] = number_format($stats_home['month_sum'], $price_decimals, ',', '.');
+    $_SESSION[$session.'idhr'] = isset($clock['date']) ? $clock['date'] : date('M/d/Y');
   }
 /*
 // get selling report
@@ -364,10 +377,16 @@ if (!isset($_SESSION["mikhmon"])) {
                       <span >
                         <div id="reloadLreport">
                           <?php 
-                          if ($_SESSION[$session.'sdate'] == $_SESSION[$session.'idhr']){
-                            echo $_income." <br/>" . "
-                          ".$_today." " . $_SESSION[$session.'totalHr'] . "vcr : " . $currency . " " . $_SESSION[$session.'dincome']. "<br/>
-                          ".$_this_month." " . $_SESSION[$session.'totalBl'] . "vcr : " . $currency . " " . $_SESSION[$session.'mincome']; 
+                          if (isset($_SESSION[$session.'dincome'])){
+                            $total_hr = isset($_SESSION[$session.'totalHr']) ? number_format((int)$_SESSION[$session.'totalHr'], 0, ',', '.') : '0';
+                            $total_bl = isset($_SESSION[$session.'totalBl']) ? number_format((int)$_SESSION[$session.'totalBl'], 0, ',', '.') : '0';
+                            $dincome = $_SESSION[$session.'dincome'];
+                            $mincome = $_SESSION[$session.'mincome'];
+                            echo '<a href="./?report=selling&session=' . $session . '" style="color:inherit; text-decoration:none;" title="Lihat Laporan Penjualan">';
+                            echo '<b>' . $_income . '</b><br/>';
+                            echo $_today . ' : <b>' . $currency . ' ' . $dincome . '</b> <small style="color:#555;">(' . $total_hr . ' voucher)</small><br/>';
+                            echo $_this_month . ' : <b>' . $currency . ' ' . $mincome . '</b> <small style="color:#555;">(' . $total_bl . ' voucher)</small>';
+                            echo '</a>';
                           }else{
                             echo "<div id='loader' ><i><span> <i class='fa fa-circle-o-notch fa-spin'></i> ". $_processing." </i></div>";
                           }

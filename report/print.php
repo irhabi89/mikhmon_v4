@@ -15,31 +15,40 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-session_start();
+if (session_status() === PHP_SESSION_NONE) session_start();
 // hide all error
 error_reporting(0);
 if (!isset($_SESSION["mikhmon"])) {
 	header("Location:../admin.php?id=login");
+	exit;
 } else {
   
   // load session MikroTik
-  $session = $_GET['session'];
+  $session = isset($_GET['session']) ? (string)$_GET['session'] : '';
 
   // lang
-  include('../include/lang.php');
-  include('../lang/'.$langid.'.php');
+  include_once(__DIR__ . '/../include/lang.php');
+  if (isset($langid) && file_exists(__DIR__ . '/../lang/' . $langid . '.php')) {
+    include_once(__DIR__ . '/../lang/' . $langid . '.php');
+  }
 
   // load config
-  include('../include/config.php');
-  include('../include/readcfg.php');
-  include_once('../include/mikhmon_records.php');
+  include_once(__DIR__ . '/../include/config.php');
+  include_once(__DIR__ . '/../include/readcfg.php');
+  include_once(__DIR__ . '/../include/mikhmon_records.php');
+  include_once(__DIR__ . '/../lib/mikhmon_db.php');
+  include_once(__DIR__ . '/../lib/sessions_store.php');
+  include_once(__DIR__ . '/../include/timezone.php');
 
-  // routeros api
-  include_once('../lib/routeros_api.class.php');
-  include_once('../lib/formatbytesbites.php');
-  $API = new RouterosAPI();
-  $API->debug = false;
-  $API->connect($iphost, $userhost, decrypt($passwdhost));
+  // routeros api & formatting
+  include_once(__DIR__ . '/../lib/routeros_api.class.php');
+  include_once(__DIR__ . '/../lib/formatbytesbites.php');
+
+  $timezone = !empty($_SESSION['timezone']) ? $_SESSION['timezone'] : 'Asia/Jakarta';
+  if (function_exists('mikhmon_valid_timezone') && !mikhmon_valid_timezone($timezone)) {
+    $timezone = 'Asia/Jakarta';
+  }
+  @date_default_timezone_set($timezone);
 
 	$idhr = isset($_GET['idhr']) ? $_GET['idhr'] : '';
 	$idbl = isset($_GET['idbl']) ? $_GET['idbl'] : '';
@@ -65,16 +74,27 @@ if (!isset($_SESSION["mikhmon"])) {
 		$fcomment = isset($fcomment_parts[1]) ? $fcomment_parts[1] : '';
 	}
 
-	include_once(__DIR__ . '/../include/timezone.php');
-	$gettimezone = $API->comm("/system/clock/print");
-	$timezone = mikhmon_timezone_from_clock(isset($gettimezone[0]) ? $gettimezone[0] : array());
-	date_default_timezone_set($timezone);
-
-	// New sales are recorded on the router via profile on-login scripts;
-	// sync new records into the DB (sales_records).
-	if ($API->connected) {
-		mikhmon_sales_sync($API, $session);
-	}
+  $db_count = mikhmon_sales_count($session);
+  $API = null;
+  // Only connect to router if DB has zero records or if removing data from router
+  if ($db_count == 0 || isset($_POST['remdata'])) {
+    $API = new RouterosAPI();
+    $API->debug = false;
+    if (!empty($iphost) && !empty($userhost)) {
+      @$API->connect($iphost, $userhost, decrypt($passwdhost));
+      if ($API->connected && empty($_SESSION['timezone'])) {
+        $gettimezone = $API->comm("/system/clock/print");
+        $tz = mikhmon_timezone_from_clock(isset($gettimezone[0]) ? $gettimezone[0] : array());
+        if (!empty($tz)) {
+          $timezone = $tz;
+          @date_default_timezone_set($timezone);
+        }
+      }
+      if ($db_count == 0 && $API->connected) {
+        mikhmon_sales_sync($API, $session);
+      }
+    }
+  }
 
 	if (isset($remdata)) {
 		// Mikhmon v3.21+: sales data lives in the DB; delete it there and
@@ -120,58 +140,23 @@ if (!isset($_SESSION["mikhmon"])) {
 		$fprefix = "";
 	}
 	if (strlen($idhr) > "0") {
-		if ($API->connect($iphost, $userhost, decrypt($passwdhost))) {
-			$getData = mikhmon_sales_find($session, $idhr);
-			$TotalReg = mikhmon_count_rows($getData);
-			if ($TotalReg == 0) {
-				// Fallback: RouterOS 7-style date ("2026-11-19") in the record
-				// name vs legacy $idhr ("nov/19/2026").
-				$v7date = date('Y-m-d', strtotime((string)$idhr));
-				$getData = array();
-				foreach (mikhmon_sales_find($session) as $r) {
-					if (isset($r['name'])) {
-						$d = mikhmon_script_parse((string)$r['name'])[0];
-						if ($d === (string)$idhr || $d === $v7date) {
-							$getData[] = $r;
-						}
-					}
-				}
-				$TotalReg = count($getData);
-			}
-		}
+		$getData = mikhmon_sales_find($session, $idhr);
+		$TotalReg = mikhmon_count_rows($getData);
 		$filedownload = $idhr;
 		$shf = "hidden";
 		$shd = "inline-block";
 	} elseif (strlen($idbl) > "0") {
-		if ($API->connect($iphost, $userhost, decrypt($passwdhost))) {
-			$getData = mikhmon_sales_find($session, null, $idbl);
-			$TotalReg = mikhmon_count_rows($getData);
-		}
+		$getData = mikhmon_sales_find($session, null, $idbl);
+		$TotalReg = mikhmon_count_rows($getData);
 		$filedownload = $idbl;
 		$shf = "hidden";
 		$shd = "inline-block";
-	} elseif ($idhr == "" || $idbl == "") {
-		if ($API->connect($iphost, $userhost, decrypt($passwdhost))) {
-			$getData = $API->comm("/system/script/print", array(
-				"?comment" => "mikhmon",
-				".proplist" => "name",
-			));
-			$TotalReg = count($getData);
-		}
+	} else {
+		$getData = mikhmon_sales_find($session);
+		$TotalReg = mikhmon_count_rows($getData);
 		$filedownload = "all";
 		$shf = "text";
 		$shd = "none";
-	} elseif (strlen($idbl) > "0" ) {
-		if ($API->connect($iphost, $userhost, decrypt($passwdhost))) {
-			$getData = $API->comm("/system/script/print", array(
-				"?owner" => "$idbl",
-				".proplist" => "name",
-			));
-			$TotalReg = count($getData);
-		}
-		$filedownload = $idbl;
-		$shf = "hidden";
-		$shd = "inline-block";
 	}
 	
 }

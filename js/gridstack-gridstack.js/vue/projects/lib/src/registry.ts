@@ -1,0 +1,118 @@
+/**
+ * Static GridStack callbacks for Vue — same pattern as React gsCreateReactComponents.
+ * Dispatches via DOM `_gridComp` / `_gridItemRef` back-refs (no closure over per-grid state).
+ */
+import { GridStack, Utils } from 'gridstack'
+import type {
+  GridHTMLElement,
+  GridItemHTMLElement,
+  GridStackNode,
+  GridStackWidget,
+} from './types'
+
+/** @internal minted ids for widgets that arrive without one (sidebar drag-in) - see gsCreateVueComponents */
+let syntheticIdSeq = 0
+
+export function installGridStackVueCallbacks(): void {
+  if (!GridStack.addRemoveCB) {
+    GridStack.addRemoveCB = gsCreateVueComponents
+  }
+  if (!GridStack.saveCB) {
+    GridStack.saveCB = gsSaveAdditionalVueInfo
+  }
+  if (!GridStack.updateCB) {
+    GridStack.updateCB = gsUpdateVueComponents
+  }
+}
+
+/** @internal Walk up from `el` to find the nearest `_gridComp` back-ref. */
+function nearestGridComp(el: HTMLElement | null): GridHTMLElement['_gridComp'] | undefined {
+  let node: HTMLElement | null = el
+  while (node) {
+    const comp = (node as GridHTMLElement)._gridComp
+    if (comp) return comp
+    node = node.parentElement
+  }
+  return undefined
+}
+
+/** @internal */
+export function gsCreateVueComponents(
+  parent: HTMLElement,
+  w: GridStackWidget,
+  add: boolean,
+  isGrid: boolean,
+): HTMLElement | undefined {
+  if (add) {
+    if (isGrid) {
+      const classes = ['grid-stack']
+      if (w.class) classes.push(...w.class.split(' ').filter(Boolean))
+      const el = Utils.createDiv(classes) as GridHTMLElement
+      // Inherit the host's _gridComp so nested-grid children can register teleport anchors.
+      const inherited = nearestGridComp(parent)
+      if (inherited) el._gridComp = inherited
+      parent.appendChild(el)
+      return el
+    }
+
+    const gridHost = (parent as GridHTMLElement)._gridComp
+    if (!gridHost) return undefined
+
+    const itemClasses = ['grid-stack-item']
+    if (w.class) itemClasses.push(...w.class.split(' ').filter(Boolean))
+    const el = Utils.createDiv(itemClasses) as GridItemHTMLElement
+    Utils.createDiv(['grid-stack-item-content'], el)
+
+    // Widgets dropped in from a sidebar (GridStack.setupDragIn) carry no id - the same spec is
+    // dropped over and over, so it can't have one - yet the portal that renders `component` is
+    // keyed by id. Without one we used to silently skip rendering and leave an empty item (#2976).
+    // `w` is the object GS turns into the node, so writing it back sticks for save()/updateCB too.
+    if (!w.id && w.component) w.id = `gs-vue-${++syntheticIdSeq}`
+
+    const id = w.id
+    if (id) {
+      el._gridItemRef = { id, gridComp: gridHost }
+      if (w.component) gridHost.registerSyntheticItemId(id)
+    }
+    if (w.content) {
+      const content = el.querySelector('.grid-stack-item-content')
+      if (content) content.textContent = w.content
+    }
+    return el
+  }
+
+  const el = w.el as GridItemHTMLElement | undefined
+  if (el?._gridItemRef) {
+    const { id, gridComp } = el._gridItemRef
+    gridComp.unregisterSyntheticItemId(id)
+    delete el._gridItemRef
+  }
+  el?.remove()
+  return undefined
+}
+
+export function gsSaveAdditionalVueInfo(
+  node: GridStackNode,
+  w: GridStackWidget,
+): void {
+  const n = node as GridStackNode & { component?: string; props?: Record<string, unknown> }
+  if (n.component != null) w.component = n.component
+  if (n.props != null) w.props = { ...n.props }
+  // Strip runtime-only fields that must never appear in serialized output.
+  delete (w as Record<string, unknown>).visibleObservable
+  const el = node.el as GridItemHTMLElement | undefined
+  const id = n.id
+  if (id && el?._gridItemRef?.gridComp?.mergeWidgetPropsForSave) {
+    el._gridItemRef.gridComp.mergeWidgetPropsForSave(id, w)
+  }
+}
+
+export function gsUpdateVueComponents(node: GridStackNode): void {
+  const el = node.el as GridItemHTMLElement | undefined
+  const ref = el?._gridItemRef
+  if (!ref) return
+  const { id, gridComp } = ref
+  const w = node as GridStackWidget
+  if (w.props) gridComp.deserializeWidget(id, w)
+  gridComp.requestUpdate()
+}

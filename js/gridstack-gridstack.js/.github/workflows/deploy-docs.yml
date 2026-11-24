@@ -1,0 +1,121 @@
+name: Deploy Documentation
+
+on:
+  push:
+    branches: [ master ]
+  # Allow manual triggering
+  workflow_dispatch:
+
+jobs:
+  deploy-docs:
+    runs-on: ubuntu-latest
+    # Only run on pushes to master (not PRs)
+    if: github.ref == 'refs/heads/master'
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'yarn'
+
+    - name: Install main dependencies
+      run: yarn install
+
+    - name: Build main library
+      run: |
+        grunt
+        webpack
+        npx tsc --project tsconfig.docs.json --stripInternal
+
+    - name: Install Angular dependencies
+      run: |
+        cd angular
+        yarn install
+
+    - name: Build Angular library
+      run: yarn build:ng
+
+    - name: Install React dependencies
+      run: cd react && npm install --legacy-peer-deps
+
+    - name: Install Vue dependencies
+      run: cd vue && npm install --legacy-peer-deps
+
+    - name: Generate all documentation
+      run: yarn doc
+
+    - name: Prepare deployment structure
+      run: |
+        mkdir -p deploy
+        
+        # Create proper directory structure for GitHub Pages
+        mkdir -p deploy/doc/html
+        mkdir -p deploy/angular/doc/html
+        mkdir -p deploy/react/doc/html
+        mkdir -p deploy/vue/doc/html
+        
+        # Debug: Check what was generated
+        echo "📁 Checking generated documentation..."
+        for lib in "Main:doc/html" "Angular:angular/doc/html" "React:react/doc/html" "Vue:vue/doc/html"; do
+          name="${lib%%:*}"
+          dir="${lib##*:}"
+          if [ -d "$dir" ]; then
+            echo "  ✓ $name: $dir/ exists ($(ls $dir | wc -l) files)"
+          else
+            echo "  ✗ $name: $dir/ NOT FOUND"
+          fi
+        done
+        
+        # Copy main library HTML documentation
+        if [ -d "doc/html" ]; then
+          cp -r doc/html/* deploy/doc/html/
+          echo "✓ Copied main library HTML docs"
+        fi
+        
+        # Copy Angular library HTML documentation  
+        if [ -d "angular/doc/html" ]; then
+          cp -r angular/doc/html/* deploy/angular/doc/html/
+          echo "✓ Copied Angular library HTML docs"
+        fi
+        
+        # Copy React library HTML documentation
+        if [ -d "react/doc/html" ]; then
+          cp -r react/doc/html/* deploy/react/doc/html/
+          echo "✓ Copied React library HTML docs"
+        fi
+
+        # Copy Vue library HTML documentation
+        if [ -d "vue/doc/html" ]; then
+          cp -r vue/doc/html/* deploy/vue/doc/html/
+          echo "✓ Copied Vue library HTML docs"
+        fi
+
+        # Ensure .nojekyll exists to prevent Jekyll processing
+        touch deploy/.nojekyll
+        
+        # Final verification
+        echo ""
+        echo "📦 Deployment structure (HTML files):"
+        find deploy -type f -name "*.html" | head -20
+    
+    - name: Deploy to GitHub Pages
+      uses: peaceiris/actions-gh-pages@v4
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./deploy
+        keep_files: true
+        commit_message: 'Deploy documentation from ${{ github.sha }}'
+
+    - name: Deployment completed
+      run: |
+        echo "✅ Documentation deployment completed!"
+        echo "📖 Available at: https://gridstack.github.io/gridstack.js/"
+        echo "   Angular: https://gridstack.github.io/gridstack.js/angular/doc/html/"
+        echo "   React:   https://gridstack.github.io/gridstack.js/react/doc/html/"
+        echo "   Vue:     https://gridstack.github.io/gridstack.js/vue/doc/html/"

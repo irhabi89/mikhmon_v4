@@ -15,11 +15,12 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-session_start();
+if (session_status() === PHP_SESSION_NONE) session_start();
 // hide all error
 error_reporting(0);
 if (!isset($_SESSION["mikhmon"])) {
 	header("Location:../admin.php?id=login");
+	exit;
 } else {
 
 	$idhr = isset($_GET['idhr']) ? $_GET['idhr'] : '';
@@ -42,22 +43,24 @@ if (!isset($_SESSION["mikhmon"])) {
 	include_once('./include/timezone.php');
 	include_once('./include/mikhmon_records.php');
 	include_once('./lib/sales_import.php');
-	$gettimezone = $API->comm("/system/clock/print");
-	$timezone = mikhmon_timezone_from_clock(isset($gettimezone[0]) ? $gettimezone[0] : array());
-	date_default_timezone_set($timezone);
+	if (!empty($_SESSION['timezone'])) {
+		date_default_timezone_set(mikhmon_valid_timezone($_SESSION['timezone']));
+	} elseif (isset($API) && is_object($API) && !empty($API->connected)) {
+		$gettimezone = $API->comm("/system/clock/print");
+		$timezone = mikhmon_timezone_from_clock(isset($gettimezone[0]) ? $gettimezone[0] : array());
+		$_SESSION['timezone'] = $timezone;
+		date_default_timezone_set($timezone);
+	}
 
-	// --- data source: the router while the import is incomplete, the DB once complete ---
-	// Once an import run finishes (queue fully processed) the DB is authoritative,
-	// even if the router keeps recording new sales for later imports.
+	// --- DB-FIRST ARCHITECTURE ---
+	// If the database has sales records ($db_count > 0), the DB is authoritative.
+	// We NEVER fall back to downloading all scripts from the router synchronously on page load.
+	// Only if the database is completely empty ($db_count == 0) and the router is available
+	// do we fall back to the router for first-time onboarding.
 	$db_count = mikhmon_sales_count($session);
 	$queue_total = mikhmon_import_queue_count($session);
 	$queue_done = mikhmon_import_queue_count($session, 1);
-	if ($queue_total > 0) {
-		$use_router = ($queue_done < $queue_total);
-	} else {
-		$router_total = mikhmon_import_router_total($session); // -1 when unreachable
-		$use_router = ($router_total >= 0) ? ($db_count < $router_total) : ($db_count == 0);
-	}
+	$use_router = ($db_count == 0);
 
 	$router_rows = array();
 	if ($use_router) {
@@ -127,37 +130,38 @@ if (!isset($_SESSION["mikhmon"])) {
 			$allRows = $router_rows;
 		}
 	} else {
-		if (strlen($idhr) > "0") {
-			$allRows = mikhmon_sales_find($session, $idhr);
-			if (count($allRows) == 0) {
-				foreach (mikhmon_sales_find($session) as $r) {
-					if (!isset($r['name'])) { continue; }
-					$d = mikhmon_script_parse((string)$r['name'])[0];
-					if ($d === (string)$idhr || $d === $v7date) { $allRows[] = $r; }
-				}
-			}
+		$sql_paged = true;
+		$filter_src = (strlen($idhr) > 0) ? $idhr : null;
+		$filter_own = (strlen($idbl) > 0) ? $idbl : null;
+		$filter_prefix = (strlen($prefix) > 0) ? $prefix : null;
+
+		if (strlen($idhr) > 0) {
 			$filedownload = $idhr;
 			$shf = "hidden";
 			$shd = "inline-block";
-		} elseif (strlen($idbl) > "0") {
-			$allRows = mikhmon_sales_find($session, null, $idbl);
+		} elseif (strlen($idbl) > 0) {
 			$filedownload = $idbl;
 			$shf = "hidden";
 			$shd = "inline-block";
+		}
+
+		$TotalReg = mikhmon_sales_count_for($session, $filter_src, $filter_own, null, $filter_prefix);
+		$sumPrice = mikhmon_sales_sum_for($session, $filter_src, $filter_own, null, $filter_prefix);
+		$totalPages = max(1, (int)ceil($TotalReg / $per_page));
+		if ($page > $totalPages) { $page = $totalPages; }
+		$getData = mikhmon_sales_find($session, $filter_src, $filter_own, null, $per_page, ($page - 1) * $per_page, $filter_prefix);
+
+		if (strlen($idbl) > 0) {
+			$daily = mikhmon_sales_resume_daily($session, $idbl);
+			$_SESSION['dataresume'] = $daily['summary'];
+			$_SESSION['totalresume'] = $daily['total_count'] . '/' . $daily['total_sum'];
 		} else {
-			// "All" view: page in SQL so tens of thousands of rows are not loaded at once.
-			$TotalReg = mikhmon_sales_count_for($session);
-			$sumPrice = mikhmon_sales_sum_for($session);
-			$totalPages = max(1, (int)ceil($TotalReg / $per_page));
-			if ($page > $totalPages) { $page = $totalPages; }
-			$getData = mikhmon_sales_find($session, null, null, null, $per_page, ($page - 1) * $per_page);
-			$sql_paged = true;
 			$_SESSION['dataresume'] = '';
-			$_SESSION['totalresume'] = $TotalReg . '/0';
+			$_SESSION['totalresume'] = $TotalReg . '/' . $sumPrice;
 		}
 	}
 
-	if ($prefix != "") {
+	if ($use_router && $prefix != "") {
 		$filtered = array();
 		foreach ($allRows as $r) {
 			if (isset($r['name']) && substr((string)mikhmon_script_parse((string)$r['name'])[2], 0, strlen($prefix)) == $prefix) {
@@ -193,7 +197,11 @@ if (!isset($_SESSION["mikhmon"])) {
 	$pageCount = count($getData);
 
 	// KPI helpers
-	$price_decimals = in_array($currency, $cekindo['indo']) ? 0 : 2;
+	$indo_currencies = (isset($cekindo['indo']) && is_array($cekindo['indo']))
+		? $cekindo['indo']
+		: array('RP', 'Rp', 'rp', 'IDR', 'idr', 'RP.', 'Rp.', 'rp.', 'IDR.', 'idr.');
+	$currency = isset($currency) ? $currency : 'Rp';
+	$price_decimals = in_array((string)$currency, $indo_currencies) ? 0 : 2;
 	$fmt = function ($v) use ($currency, $price_decimals) {
 		return $currency . ' ' . number_format((float)$v, $price_decimals, ',', '.');
 	};
@@ -342,6 +350,34 @@ function impDeleteLoop() {
 window.addEventListener('hashchange', function () {
   if (window.location.hash === '#importModal') { importStatus(); }
 });
+
+function fetchImportBadge() {
+  impPost('status', function(s) {
+    if (!s || !s.ok) return;
+    var badge = document.getElementById('importBadge');
+    if (!badge) return;
+    var rtot = parseInt(s.router_total, 10);
+    var dcnt = parseInt(s.db_count, 10);
+    var pct = s.percent;
+    if (rtot > dcnt) {
+      var diff = rtot - dcnt;
+      badge.style.display = 'inline-block';
+      badge.className = 'btn bg-yellow text-dark';
+      badge.innerHTML = '<i class="fa fa-refresh"></i> ' + pct + '% (' + diff + ' baru) Sync';
+      badge.title = 'Ada ' + diff + ' skrip di Mikrotik belum tersimpan di DB. Klik untuk import.';
+    } else if (rtot > 0 && dcnt >= rtot) {
+      badge.style.display = 'inline-block';
+      badge.className = 'btn bg-green text-white';
+      badge.innerHTML = '<i class="fa fa-check"></i> ' + pct + '% Terimport';
+      badge.title = 'Seluruh data penjualan dari Mikrotik telah terimport ke database.';
+    }
+  });
+}
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+  setTimeout(fetchImportBadge, 600);
+} else {
+  document.addEventListener('DOMContentLoaded', function() { setTimeout(fetchImportBadge, 600); });
+}
 </script>
 
 <!-- KPI cards (dashboard styling) -->
@@ -428,6 +464,7 @@ $(document).ready(function(){
 		  <button class="btn bg-primary" onclick="exportTableToCSV('report-mikhmon-<?= $filedownload . $fprefix; ?>.csv')" title="Download selling report"><i class="fa fa-download"></i> CSV</button>
 			<button class="btn bg-primary" onclick="location.href='./?report=selling&session=<?= $session; ?>';" title="Reload all data"><i class="fa fa-search"></i> <?= $_all ?></button>
 			<button class="btn bg-primary" onclick="location.href='#importModal';" title="Import data penjualan dari Mikrotik ke database"><i class="fa fa-upload"></i> Import</button>
+			<span id="importBadge" style="display:none; cursor:pointer;" onclick="location.href='#importModal';"></span>
 			<?php if(!empty($idbl)){echo '<button name="resume" id="openResume" class="btn bg-primary"title="Resume Report"><i class="fa fa-area-chart"></i> '.$_resume.'</button>';}else{
 				echo '<a class="btn bg-primary" href="./?report=selling&idbl='.$idbl2.'&session='.$session.'" title="Show '.ucfirst(substr($idbl2,0,3).' '.substr($idbl2,3,5)).'"><i class="fa fa-search"></i> '.ucfirst(substr($idbl2,0,3).' '.substr($idbl2,3,5)).'</a>';}?>
 		  <button name="print" class="btn bg-primary" onclick="window.open('./report/print.php?<?= explode("?report=selling&",$url)[1] ?>','_blank');" title="Print"><i class="fa fa-print"></i> <?= $_print ?></button>
@@ -624,10 +661,10 @@ $(document).ready(function(){
 </div>
 <div class="modal-window" id="help" aria-hidden="true">
   <div>
-  	<header><h1><?= $_help ?></h1></header>
+  	<header><h1><?= isset($_help) ? $_help : 'Help' ?></h1></header>
   	<a style="font-weight:bold;" href="#" title="Close" class="modal-close">X</a>
 	<p>
-			<?= $_help_report ?>
+			<?= isset($_help_report) ? $_help_report : '' ?>
 	</p>
   </div>
 </div>

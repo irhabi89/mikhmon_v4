@@ -203,17 +203,20 @@ include('../lang/'.$langid.'.php');
 
   $API->connect($iphost, $userhost, decrypt($passwdhost));
 
-  // move hotspot log to disk
-  $getlogging = $API->comm("/system/logging/print", array("?prefix" => "->", ));
-  $logging = $getlogging[0];
-  if ($logging['prefix'] == "->") {
-  } else {
-    $API->comm("/system/logging/add", array("action" => "disk", "prefix" => "->", "topics" => "hotspot,info,debug", ));
+  // check/move hotspot log to disk once per session instead of every 10s
+  if (empty($_SESSION[$session.'logging_disk'])) {
+    $getlogging = $API->comm("/system/logging/print", array("?prefix" => "->", ".proplist" => ".id,prefix"));
+    if (isset($getlogging[0]['prefix']) && $getlogging[0]['prefix'] == "->") {
+      $_SESSION[$session.'logging_disk'] = true;
+    } else {
+      $API->comm("/system/logging/add", array("action" => "disk", "prefix" => "->", "topics" => "hotspot,info,debug"));
+      $_SESSION[$session.'logging_disk'] = true;
+    }
   }
-  
-  // get hotspot log
-  $getlog = $API->comm("/log/print", array("?topics" => "hotspot,info,debug", ));
-  $log = array_reverse($getlog);
+
+  // get hotspot log with light proplist to save WAN bandwidth
+  $getlog = $API->comm("/log/print", array("?topics" => "hotspot,info,debug", ".proplist" => "time,message"));
+  $log = is_array($getlog) ? array_reverse($getlog) : array();
   //$THotspotLog = count($getlog);
 
   if ($livereport == "disable") {

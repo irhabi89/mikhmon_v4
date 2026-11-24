@@ -226,33 +226,80 @@ function mikhmon_sales_insert($row)
     }
 }
 
-function mikhmon_sales_where($session, $source, $owner, $comment)
+function mikhmon_sales_date_variants($d)
+{
+    $d = trim((string)$d);
+    if ($d === '') {
+        return array();
+    }
+    $variants = array($d);
+    $mnames = "janfebmaraprmayjunjulaugsepoctnovdec";
+    if (preg_match('/^(\d{4})-(\d{1,2})-(\d{1,2})$/', $d, $m)) {
+        $year = (int)$m[1];
+        $mnum = (int)$m[2];
+        $day = (int)$m[3];
+        if ($mnum >= 1 && $mnum <= 12) {
+            $mstr = substr($mnames, ($mnum - 1) * 3, 3);
+            $variants[] = sprintf('%04d-%02d-%02d', $year, $mnum, $day);
+            $variants[] = $mstr . '/' . sprintf('%02d', $day) . '/' . $year;
+            $variants[] = $mstr . '/' . $day . '/' . $year;
+        }
+    } elseif (preg_match('/^([A-Za-z]{3})\/(\d{1,2})\/(\d{2,4})$/', $d, $m)) {
+        $mstr = strtolower($m[1]);
+        $pos = strpos($mnames, $mstr);
+        $mnum = ($pos !== false) ? (int)($pos / 3) + 1 : 1;
+        $day = (int)$m[2];
+        $year = (int)$m[3];
+        if ($year < 100) {
+            $year += 2000;
+        }
+        $variants[] = sprintf('%04d-%02d-%02d', $year, $mnum, $day);
+        $variants[] = $mstr . '/' . sprintf('%02d', $day) . '/' . $year;
+        $variants[] = $mstr . '/' . $day . '/' . $year;
+    }
+    return array_values(array_unique($variants));
+}
+
+function mikhmon_sales_where($session, $source = null, $owner = null, $comment = null, $prefix = null)
 {
     $where = 'session = ?';
-    $vals = array($session);
-    if ($source !== null) {
-        $where .= ' AND source = ?';
-        $vals[] = $source;
+    $vals = array((string)$session);
+    if ($source !== null && $source !== '') {
+        $dvars = mikhmon_sales_date_variants($source);
+        if (!empty($dvars)) {
+            $placeholders = implode(',', array_fill(0, count($dvars), '?'));
+            $where .= ' AND (source IN (' . $placeholders . ') OR c_date IN (' . $placeholders . '))';
+            foreach ($dvars as $dv) { $vals[] = $dv; }
+            foreach ($dvars as $dv) { $vals[] = $dv; }
+        } else {
+            $where .= ' AND (source = ? OR c_date = ?)';
+            $vals[] = (string)$source;
+            $vals[] = (string)$source;
+        }
     }
-    if ($owner !== null) {
+    if ($owner !== null && $owner !== '') {
         $where .= ' AND owner = ?';
-        $vals[] = $owner;
+        $vals[] = (string)$owner;
     }
-    if ($comment !== null) {
+    if ($comment !== null && $comment !== '') {
         $where .= ' AND comment = ?';
-        $vals[] = $comment;
+        $vals[] = (string)$comment;
+    }
+    if ($prefix !== null && $prefix !== '') {
+        $where .= ' AND c_username LIKE ?';
+        $vals[] = (string)$prefix . '%';
     }
     return array($where, $vals);
 }
 
-function mikhmon_sales_find($session, $source = null, $owner = null, $comment = null, $limit = null, $offset = 0)
+function mikhmon_sales_find($session, $source = null, $owner = null, $comment = null, $limit = null, $offset = 0, $prefix = null)
 {
     $db = mikhmon_db();
     if ($db === false) {
         return array();
     }
-    list($where, $vals) = mikhmon_sales_where($session, $source, $owner, $comment);
-    $sql = 'SELECT * FROM sales_records WHERE ' . $where . ' ORDER BY imported_at, id';
+    list($where, $vals) = mikhmon_sales_where($session, $source, $owner, $comment, $prefix);
+    $sql = 'SELECT * FROM sales_records WHERE ' . $where . ' ORDER BY imported_at DESC, id DESC';
     if ($limit !== null) {
         $sql .= ' LIMIT ' . (int)$limit . ' OFFSET ' . (int)$offset;
     }
@@ -265,13 +312,13 @@ function mikhmon_sales_find($session, $source = null, $owner = null, $comment = 
     }
 }
 
-function mikhmon_sales_count_for($session, $source = null, $owner = null, $comment = null)
+function mikhmon_sales_count_for($session, $source = null, $owner = null, $comment = null, $prefix = null)
 {
     $db = mikhmon_db();
     if ($db === false) {
         return 0;
     }
-    list($where, $vals) = mikhmon_sales_where($session, $source, $owner, $comment);
+    list($where, $vals) = mikhmon_sales_where($session, $source, $owner, $comment, $prefix);
     try {
         $st = $db->prepare('SELECT COUNT(*) FROM sales_records WHERE ' . $where);
         $st->execute($vals);
@@ -281,19 +328,51 @@ function mikhmon_sales_count_for($session, $source = null, $owner = null, $comme
     }
 }
 
-function mikhmon_sales_sum_for($session, $source = null, $owner = null, $comment = null)
+function mikhmon_sales_sum_for($session, $source = null, $owner = null, $comment = null, $prefix = null)
 {
     $db = mikhmon_db();
     if ($db === false) {
         return 0.0;
     }
-    list($where, $vals) = mikhmon_sales_where($session, $source, $owner, $comment);
+    list($where, $vals) = mikhmon_sales_where($session, $source, $owner, $comment, $prefix);
     try {
         $st = $db->prepare('SELECT COALESCE(SUM(c_price), 0) FROM sales_records WHERE ' . $where);
         $st->execute($vals);
         return (float)$st->fetchColumn();
     } catch (PDOException $e) {
         return 0.0;
+    }
+}
+
+function mikhmon_sales_resume_daily($session, $idbl)
+{
+    $db = mikhmon_db();
+    $result = array('summary' => '', 'total_count' => 0, 'total_sum' => 0.0, 'map' => array());
+    if ($db === false) {
+        return $result;
+    }
+    try {
+        $st = $db->prepare('SELECT c_date, COUNT(*) c, COALESCE(SUM(c_price), 0) s FROM sales_records WHERE session = ? AND owner = ? GROUP BY c_date');
+        $st->execute(array((string)$session, (string)$idbl));
+        $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+        $summary = '';
+        foreach ($rows as $r) {
+            $d = (string)$r['c_date'];
+            $c = (int)$r['c'];
+            $s = (float)$r['s'];
+            $result['total_count'] += $c;
+            $result['total_sum'] += $s;
+            $val = $c . '/' . $s;
+            $summary .= $d . $s;
+            $result['map'][$d] = $val;
+            foreach (mikhmon_sales_date_variants($d) as $v) {
+                $result['map'][$v] = $val;
+            }
+        }
+        $result['summary'] = $summary;
+        return $result;
+    } catch (PDOException $e) {
+        return $result;
     }
 }
 

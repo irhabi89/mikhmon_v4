@@ -15,26 +15,29 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-session_start();
+if (session_status() === PHP_SESSION_NONE) session_start();
 // hide all error
 error_reporting(0);
 if (!isset($_SESSION["mikhmon"])) {
 	header("Location:../admin.php?id=login");
+	exit;
 } else {
 
 	$idhr = isset($_GET['idhr']) ? $_GET['idhr'] : '';
 	$idbl = isset($_GET['idbl']) ? $_GET['idbl'] : '';
 	$remdata = isset($_POST['remdata']) ? $_POST['remdata'] : null;
 
-	include_once('./include/mikhmon_records.php');
+	include_once(__DIR__ . '/../include/mikhmon_records.php');
+	include_once(__DIR__ . '/../lib/sessions_store.php');
+	include_once(__DIR__ . '/../lib/mikhmon_db.php');
 
-	// First view of a router that has no data in the DB yet: copy the router
-	// sales records into SQLite so the user log is never empty.
-	if ($API->connect($iphost, $userhost, decrypt($passwdhost))) {
-		if (mikhmon_sales_count($session) == 0) {
+	// DB-first: only sync from router if the DB has no records yet for this session.
+	$db_count = mikhmon_sales_count($session);
+	if ($db_count == 0) {
+		if ($API->connect($iphost, $userhost, decrypt($passwdhost))) {
 			mikhmon_sales_sync($API, $session);
+			$API->disconnect();
 		}
-		$API->disconnect();
 	}
 
 	if (strlen($idhr) > "0") {
@@ -47,8 +50,8 @@ if (!isset($_SESSION["mikhmon"])) {
 		$filedownload = $idbl;
 		$shf = "hidden";
 		$shd = "text";
-	} elseif ($idhr == "" || $idbl == "") {
-		$ARRAY = mikhmon_sales_find($session);
+	} else {
+		$ARRAY = mikhmon_sales_find($session, null, null, null, 500);
 		$filedownload = "all";
 		$shf = "text";
 		$shd = "hidden";

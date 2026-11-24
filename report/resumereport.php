@@ -15,23 +15,29 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-session_start();
+if (session_status() === PHP_SESSION_NONE) session_start();
 // hide all error
 error_reporting(0);
 if (!isset($_SESSION["mikhmon"])) {
   header("Location:../admin.php?id=login");
+  exit;
 } else {
 // load session MikroTik
 $session = isset($_GET['session']) ? $_GET['session'] : '';
 
 
 // load config
-  include('../include/config.php');
-  include('../include/readcfg.php');
+  include_once(__DIR__ . '/../include/config.php');
+  include_once(__DIR__ . '/../include/readcfg.php');
+  include_once(__DIR__ . '/../lib/mikhmon_db.php');
+  include_once(__DIR__ . '/../lib/sessions_store.php');
 
 $idbl = isset($_GET['idbl']) ? $_GET['idbl'] : '';
 $thisM = substr($idbl,0,3);
 $thisY = substr($idbl,-4);
+
+$resume_daily_data = mikhmon_sales_resume_daily($session, $idbl);
+$resume_daily_map = isset($resume_daily_data['map']) ? $resume_daily_data['map'] : array();
 
 $ms = array(1 => "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec");
 $mn = array_search($thisM, $ms);
@@ -54,19 +60,32 @@ if ($mn == date("n")){
 
 if (!function_exists('resume_per_day')) {
 function resume_per_day($date){
-$evalue = isset($_SESSION['dataresume']) ? explode($date, $_SESSION['dataresume']) : array();
-$x = count($evalue);
-$result = 0;
-for ($i = 0; $i < $x; $i++) {
-    $result += (int) $evalue[$i];
-}
-return ($x > 0 ? ($x - 1) : 0) . '/' . $result;
+  global $resume_daily_map;
+  if (isset($resume_daily_map[$date])) {
+    return $resume_daily_map[$date];
+  }
+  $ldate = strtolower($date);
+  if (isset($resume_daily_map[$ldate])) {
+    return $resume_daily_map[$ldate];
+  }
+  $evalue = isset($_SESSION['dataresume']) ? explode($date, $_SESSION['dataresume']) : array();
+  $x = count($evalue);
+  $result = 0;
+  for ($i = 0; $i < $x; $i++) {
+      $result += (int) $evalue[$i];
+  }
+  return ($x > 0 ? ($x - 1) : 0) . '/' . $result;
 }
 }
 
-$tr_parts = isset($_SESSION['totalresume']) ? explode("/", $_SESSION['totalresume']) : array();
-$totalvrc = isset($tr_parts[0]) ? $tr_parts[0] : '0';
-$totalincome = isset($tr_parts[1]) ? $tr_parts[1] : '0';
+if (!empty($resume_daily_data['total_count'])) {
+  $totalvrc = $resume_daily_data['total_count'];
+  $totalincome = $resume_daily_data['total_sum'];
+} else {
+  $tr_parts = isset($_SESSION['totalresume']) ? explode("/", $_SESSION['totalresume']) : array();
+  $totalvrc = isset($tr_parts[0]) ? $tr_parts[0] : '0';
+  $totalincome = isset($tr_parts[1]) ? $tr_parts[1] : '0';
+}
 
 
 if ($currency == in_array($currency, $cekindo['indo'])) {
