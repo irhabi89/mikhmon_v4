@@ -299,28 +299,11 @@ if (!isset($_SESSION["mikhmon"])) {
             </div>
           </div>
           </div>
-            <div class="card" style="margin-top:10px;">
-              <div class="card-header"><h3><i class="fa fa-server"></i> Per Server</h3></div>
-              <div class="card-body">
-                <div class="row" style="display:flex;flex-wrap:wrap;">
-                  <?php foreach ($dashServerRows as $srv): ?>
-                    <?php $isNone = $srv['name'] === '__none__'; $srvName = $isNone ? 'Tanpa server (arsip)' : $srv['name']; ?>
-                    <div class="col-3 col-box-6" style="display:flex;flex-grow:1;">
-                      <div class="box bg-blue bmh-75" style="width:100%;">
-                        <a onclick="cancelPage()" href="./?report=selling&session=<?= urlencode($session); ?>&server=<?= urlencode($isNone ? '__none__' : $srv['name']); ?>" style="text-decoration:none;color:inherit;">
-                          <div style="font-size:12px;font-weight:bold;margin-bottom:4px;"><i class="fa fa-server"></i> <?= mikhmon_e($srvName); ?></div>
-                          <h1 style="margin:0;font-size:24px;"><?= number_format($srv['active'], 0, ',', '.'); ?> <span style="font-size:12px;">active</span></h1>
-                          <div style="font-size:12px;"><?= number_format($srv['users'], 0, ',', '.'); ?> user</div>
-                          <div style="font-size:12px;margin-top:4px;">Today: <b><?= mikhmon_e($dash_spr_fmt($srv['today_sum'])); ?></b> (<?= number_format($srv['today_count'], 0, ',', '.'); ?>)</div>
-                          <div style="font-size:12px;">Month: <b><?= mikhmon_e($dash_spr_fmt($srv['month_sum'])); ?></b> (<?= number_format($srv['month_count'], 0, ',', '.'); ?>)</div>
-                        </a>
-                      </div>
-                    </div>
-                  <?php endforeach; ?>
-                  <?php if (empty($dashServerRows)): ?><div class="col-12 pd-10">-</div><?php endif; ?>
-                </div>
-              </div>
-            </div>
+            <?php \Mikhmon\Http\View::render('components/server-cards', array(
+              'rows' => $dashServerRows,
+              'formatMoney' => $dash_spr_fmt,
+              'session' => $session,
+            )); ?>
             <div class="card">
               <div class="card-header"><h3><i class="fa fa-area-chart"></i> <?= $_traffic ?> </h3></div>
 

@@ -69,6 +69,39 @@ final class OnloginUpgrader
     }
 
     /**
+     * Return the upgraded on-login string, or null when the script is already
+     * upgraded or is not a recognised Mikhmon-generated script.
+     */
+    public static function upgradeScript(string $onlogin): ?string
+    {
+        if ($onlogin === '' || strpos($onlogin, '|#MMSRV1#|') !== false) {
+            return null;
+        }
+
+        // Newer generator: :local sname "..."; /system script add ...
+        if (strpos($onlogin, ':local sname') !== false) {
+            $pattern = '/:local sname\s+"([^"]*)"\s*;/';
+            if (preg_match($pattern, $onlogin, $m) === 1) {
+                $oldRecord = ':local sname "' . $m[1] . '";';
+                $newRecord = self::serverLookupSnippet()
+                    . ':local sname "' . $m[1] . '|#MMSRV1#|$mmsrv";';
+                $new = str_replace($oldRecord, $newRecord, $onlogin);
+                return $new === $onlogin ? null : $new;
+            }
+            return null;
+        }
+
+        // Older Mikhmon generator: inline /system script add name="...";
+        $pattern = '/\/system script add\s+name="([^"]*)"\s+source="([^"]*)"\s+comment="mikhmon"/';
+        if (preg_match($pattern, $onlogin, $m) === 1) {
+            $newRecord = self::serverLookupSnippet()
+                . '/system script add name="' . $m[1] . '|#MMSRV1#|$mmsrv" source="' . $m[2] . '" comment="mikhmon"';
+            return preg_replace($pattern, $newRecord, $onlogin, 1);
+        }
+        return null;
+    }
+
+    /**
      * @return array{ok:bool,profiles:int,upgraded:int,skipped:int,errors:array<int,string>,backup:string}
      */
     public function upgrade(string $session, bool $apply = false): array
@@ -98,29 +131,7 @@ final class OnloginUpgrader
                     continue;
                 }
 
-                $newOnlogin = null;
-
-                // Newer generator: :local sname "..."; /system script add ...
-                if (strpos($onlogin, ':local sname') !== false) {
-                    $pattern = '/:local sname\s+"([^"]*)"\s*;/';
-                    if (preg_match($pattern, $onlogin, $m) === 1) {
-                        $oldRecord = ':local sname "' . $m[1] . '";';
-                        $newRecord = self::serverLookupSnippet()
-                            . ':local sname "' . $m[1] . '|#MMSRV1#|$mmsrv";';
-                        $newOnlogin = str_replace($oldRecord, $newRecord, $onlogin);
-                    }
-                }
-
-                // Older Mikhmon generator: inline /system script add name="...";
-                if ($newOnlogin === null) {
-                    $pattern = '/\/system script add\s+name="([^"]*)"\s+source="([^"]*)"\s+comment="mikhmon"/';
-                    if (preg_match($pattern, $onlogin, $m) === 1) {
-                        $newRecord = self::serverLookupSnippet()
-                            . '/system script add name="' . $m[1] . '|#MMSRV1#|$mmsrv" source="' . $m[2] . '" comment="mikhmon"';
-                        $newOnlogin = preg_replace($pattern, $newRecord, $onlogin, 1);
-                    }
-                }
-
+                $newOnlogin = self::upgradeScript($onlogin);
                 if (!is_string($newOnlogin) || $newOnlogin === $onlogin) {
                     $result['skipped']++;
                     continue;
