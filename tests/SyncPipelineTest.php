@@ -113,6 +113,8 @@ final class SyncPipelineTest extends TestCase
         }
         $this->assertSame(array('', 'hs-a', 'hs-b'), $sales->serverNames('s1'));
         $this->assertSame(1, $sales->countFiltered('s1', array('server' => 'hs-a')));
+        $this->assertSame(3, $sales->countFiltered('s1', array('month_name' => '11', 'year' => '2026')));
+        $this->assertSame(0, $sales->countFiltered('s1', array('month_name' => '10')));
         $this->assertSame(1, $sales->countFiltered('s1', array('server' => '__none__')));
         $stats = $sales->serverStats('s1');
         $this->assertCount(3, $stats);

@@ -410,8 +410,9 @@ final class SalesSyncService
 
         if ($deleteDb) {
             if ($normalized['date_from'] === null && $normalized['date_to'] === null
-                && $normalized['month_key'] === null && $normalized['q'] === null
-                && $normalized['username_prefix'] === null) {
+                && $normalized['month_key'] === null && $normalized['month_name'] === null
+                && $normalized['year'] === null && $normalized['q'] === null
+                && $normalized['username_prefix'] === null && $normalized['server'] === null) {
                 $out['db'] = $this->sales->deleteAll($session);
             } else {
                 $out['db'] = $this->sales->deleteFiltered($session, $normalized);
@@ -426,8 +427,13 @@ final class SalesSyncService
         $client->connect();
         try {
             $queries = array();
-            $dateKey = $normalized['date_from'];
+            $dateFrom = $normalized['date_from'];
+            $dateTo = $normalized['date_to'];
+            $dateKey = $dateFrom !== null && $dateTo !== null && $dateFrom === $dateTo ? $dateFrom : null;
             $monthKey = $normalized['month_key'];
+            $monthName = $normalized['month_name'];
+            $year = $normalized['year'];
+            $serverName = $normalized['server'];
             if ($dateKey !== null) {
                 $legacy = strtolower(date('M', strtotime($dateKey))) . '/' . date('d', strtotime($dateKey)) . '/' . date('Y', strtotime($dateKey));
                 $queries[] = array('?<name' => RecordParser::prefixUpperBound($legacy), '?>name' => $legacy);
@@ -440,6 +446,7 @@ final class SalesSyncService
                 }
                 $queries[] = array('?<name' => RecordParser::prefixUpperBound($monthKey), '?>name' => $monthKey);
             } else {
+                // A range/month-name/year/server filter is evaluated per row.
                 $queries[] = array();
             }
 
@@ -448,7 +455,7 @@ final class SalesSyncService
                 $result = $client->stream(
                     '/system/script/print',
                     array_merge(array('.proplist' => '.id,name,comment'), $q),
-                    function (array $row) use (&$ids, $dateKey, $monthKey) {
+                    function (array $row) use (&$ids, $dateFrom, $dateTo, $dateKey, $monthKey, $monthName, $year, $serverName) {
                         $name = isset($row['name']) ? (string)$row['name'] : '';
                         $comment = isset($row['comment']) ? (string)$row['comment'] : '';
                         if ($name === '' || !RecordParser::isSalesRecord($name, $comment)) {
@@ -461,8 +468,27 @@ final class SalesSyncService
                         if ($dateKey !== null && $parsed['date_key'] !== $dateKey) {
                             return true;
                         }
+                        if ($dateFrom !== null && $parsed['date_key'] < $dateFrom) {
+                            return true;
+                        }
+                        if ($dateTo !== null && $parsed['date_key'] > $dateTo) {
+                            return true;
+                        }
                         if ($monthKey !== null && $parsed['month_key'] !== $monthKey) {
                             return true;
+                        }
+                        if ($monthName !== null && substr((string)$parsed['date_key'], 5, 2) !== $monthName) {
+                            return true;
+                        }
+                        if ($year !== null && substr((string)$parsed['date_key'], 0, 4) !== $year) {
+                            return true;
+                        }
+                        if ($serverName !== null) {
+                            if ($serverName === '__none__') {
+                                if ((string)$parsed['server_name'] !== '') { return true; }
+                            } elseif ((string)$parsed['server_name'] !== $serverName) {
+                                return true;
+                            }
                         }
                         if (!empty($row['.id'])) {
                             $ids[] = array((string)$row['.id'], $name);

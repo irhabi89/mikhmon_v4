@@ -112,13 +112,15 @@ if (!isset($_SESSION["mikhmon"])) {
       <input id="filterTable" type="text" style="padding:5.8px;" class="group-item group-item-l" placeholder="<?= $_search ?>">
     </div>
     <div class="input-group-4 col-box-4">
-      <select style="padding:5px;" class="group-item group-item-m" onchange="location = this.value; loader()" title="Filter by Profile">
-        <option><?= $_profile ?> </option>
-        <option value="./?hotspot=users&profile=all&session=<?= $session; ?>"><?= $_show_all ?></option>
+      <select style="padding:5px;" class="group-item group-item-m" onchange="if (this.value) { window.location.assign(this.value); }" title="Filter by Profile">
+        <option value="" <?= empty($prof) ? 'selected' : ''; ?> disabled><?= $_profile ?> </option>
+        <option value="./?hotspot=users&amp;profile=all&amp;session=<?= urlencode((string)$session); ?>" <?= $prof === 'all' ? 'selected' : ''; ?>><?= $_show_all ?></option>
       <?php
       for ($i = 0; $i < $TotalReg2; $i++) {
         $profile = $getprofile[$i];
-        echo "<option value='./?hotspot=users&profile=" . $profile['name'] . "&session=" . $session . "'>" . $profile['name'] . "</option>";
+        $profileName = isset($profile['name']) ? (string)$profile['name'] : '';
+        $profileUrl = './?hotspot=users&profile=' . rawurlencode($profileName) . '&session=' . rawurlencode((string)$session);
+        echo '<option value="' . mikhmon_e($profileUrl) . '"' . ($prof === $profileName ? ' selected' : '') . '>' . mikhmon_e($profileName) . '</option>';
       }
       ?>
     </select>

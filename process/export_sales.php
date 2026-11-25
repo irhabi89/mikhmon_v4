@@ -28,20 +28,12 @@ if ($session === '' || preg_match('/^[A-Za-z0-9_.-]+$/', $session) !== 1) {
     exit('session tidak valid');
 }
 
-$dateKey = null;
-if (!empty($_GET['date_key']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$_GET['date_key'])) {
-    $dateKey = (string)$_GET['date_key'];
-} elseif (!empty($_GET['idhr'])) {
-    $dateKey = \Mikhmon\Support\RecordParser::dateKeyFromLegacy((string)$_GET['idhr']);
-}
-$monthKey = null;
-if (!empty($_GET['month_key']) && preg_match('/^\d{4}-\d{2}$/', (string)$_GET['month_key'])) {
-    $monthKey = (string)$_GET['month_key'];
-} elseif (!empty($_GET['idbl'])) {
-    $monthKey = \Mikhmon\Support\RecordParser::monthKeyFromBucket((string)$_GET['idbl']);
-}
-$q = isset($_GET['q']) ? trim((string)$_GET['q']) : '';
-$serverFilter = isset($_GET['server']) ? trim((string)$_GET['server']) : '';
+$filterMeta = \Mikhmon\Support\SalesFilter::fromQuery($_GET);
+$filter = $filterMeta['filter'];
+$dateKey = $filterMeta['date_key'];
+$monthKey = $filterMeta['month_key'];
+$q = $filterMeta['q'];
+$serverFilter = $filterMeta['server'];
 
 session_write_close();
 set_time_limit(0);
@@ -49,16 +41,9 @@ set_time_limit(0);
 
 $db = mikhmon_database();
 $sales = new \Mikhmon\Storage\SalesRepository($db);
-$filter = array(
-    'date_from' => $dateKey,
-    'date_to' => $dateKey,
-    'month_key' => $dateKey !== null ? null : $monthKey,
-    'q' => $q,
-    'server' => $serverFilter,
-);
 $st = $sales->exportStatement($session, $filter);
 
-$filename = 'selling-' . $session . '-' . ($dateKey !== null ? $dateKey : ($monthKey !== null ? $monthKey : 'all')) . '.csv';
+$filename = 'selling-' . preg_replace('/[^A-Za-z0-9_-]/', '_', $session) . '-' . ($dateKey !== null ? $dateKey : ($monthKey !== null ? $monthKey : 'filtered')) . '.csv';
 header('Content-Type: text/csv; charset=utf-8');
 header('Content-Disposition: attachment; filename="' . $filename . '"');
 header('Cache-Control: no-store');

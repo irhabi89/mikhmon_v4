@@ -28,49 +28,20 @@ $fmt = function ($value) use ($currency, $decimals) {
     return mikhmon_money($value, $currency, $decimals);
 };
 
-$dateKey = null;
-if (!empty($_GET['date_key']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$_GET['date_key'])) {
-    $dateKey = (string)$_GET['date_key'];
-} elseif (!empty($_GET['idhr'])) {
-    $dateKey = \Mikhmon\Support\RecordParser::dateKeyFromLegacy((string)$_GET['idhr']);
-}
-$monthKey = null;
-if (!empty($_GET['month_key']) && preg_match('/^\d{4}-\d{2}$/', (string)$_GET['month_key'])) {
-    $monthKey = (string)$_GET['month_key'];
-} elseif (!empty($_GET['idbl'])) {
-    $monthKey = \Mikhmon\Support\RecordParser::monthKeyFromBucket((string)$_GET['idbl']);
-}
-if ($dateKey !== null) {
-    $monthKey = null;
-}
-$q = isset($_GET['q']) ? trim((string)$_GET['q']) : '';
-$serverFilter = isset($_GET['server']) ? trim((string)$_GET['server']) : '';
-
-$filter = array(
-    'date_from' => $dateKey,
-    'date_to' => $dateKey,
-    'month_key' => $monthKey,
-    'q' => $q,
-    'server' => $serverFilter,
-);
+$filterMeta = \Mikhmon\Support\SalesFilter::fromQuery($_GET);
+$filter = $filterMeta['filter'];
+$periodLabel = \Mikhmon\Support\SalesFilter::label($filterMeta);
+$dateKey = $filterMeta['date_key'];
+$monthKey = $filterMeta['month_key'];
+$q = $filterMeta['q'];
+$serverFilter = $filterMeta['server'];
 $sales = new \Mikhmon\Storage\SalesRepository($db);
 $total = $sales->countFiltered($session, $filter);
 $sum = $sales->sumFiltered($session, $filter);
 $cap = 20000;
 $st = $sales->exportStatement($session, $filter);
-$periodLabel = $dateKey !== null
-    ? date('d M Y', strtotime($dateKey))
-    : ($monthKey !== null ? date('F Y', strtotime($monthKey . '-01')) : 'Semua data');
-$csvUrl = './process/export_sales.php?' . http_build_query(array(
-    'report' => 'selling',
-    'session' => $session,
-    'date_key' => $dateKey,
-    'month_key' => $monthKey,
-    'q' => $q,
-    'server' => $serverFilter,
-    'token' => \Mikhmon\Http\Csrf::token(),
-));
-$backUrl = './?report=selling&session=' . urlencode($session);
+$csvUrl = './process/export_sales.php?' . http_build_query(array_merge(\Mikhmon\Support\SalesFilter::query($filterMeta, $session), array('token' => \Mikhmon\Http\Csrf::token())));
+$backUrl = './?' . http_build_query(\Mikhmon\Support\SalesFilter::query($filterMeta, $session));
 ?>
 <!DOCTYPE html>
 <html lang="id">

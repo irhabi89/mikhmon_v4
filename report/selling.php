@@ -30,57 +30,34 @@ if ($session === '' || $db->fetchOne('SELECT name FROM mikhmon_sessions WHERE na
 $currency = isset($currency) && $currency !== '' ? (string)$currency : 'Rp';
 $decimals = in_array(strtoupper($currency), array('RP', 'IDR', 'RP.'), true) ? 0 : 2;
 
-$dateKey = null;
-if (!empty($_GET['date_key']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$_GET['date_key'])) {
-    $dateKey = (string)$_GET['date_key'];
-} elseif (!empty($_GET['idhr'])) {
-    $dateKey = \Mikhmon\Support\RecordParser::dateKeyFromLegacy((string)$_GET['idhr']);
-}
-$monthKey = null;
-if (!empty($_GET['month_key']) && preg_match('/^\d{4}-\d{2}$/', (string)$_GET['month_key'])) {
-    $monthKey = (string)$_GET['month_key'];
-} elseif (!empty($_GET['idbl'])) {
-    $monthKey = \Mikhmon\Support\RecordParser::monthKeyFromBucket((string)$_GET['idbl']);
-}
-if ($dateKey !== null) {
-    $monthKey = null;
-}
-
-$q = isset($_GET['q']) ? trim((string)$_GET['q']) : (isset($_GET['prefix']) ? trim((string)$_GET['prefix']) : '');
-$serverFilter = isset($_GET['server']) ? trim((string)$_GET['server']) : '';
+$filterMeta = \Mikhmon\Support\SalesFilter::fromQuery($_GET);
+$filter = $filterMeta['filter'];
+$dateKey = $filterMeta['date_key'];
+$dateFrom = $filterMeta['date_from'];
+$dateTo = $filterMeta['date_to'];
+$monthKey = $filterMeta['month_key'];
+$monthName = $filterMeta['month_name'];
+$year = $filterMeta['year'];
+$q = $filterMeta['q'];
+$serverFilter = $filterMeta['server'];
 $page = \Mikhmon\Support\Pagination::page(isset($_GET['page']) ? $_GET['page'] : 1);
 $perPage = \Mikhmon\Support\Pagination::perPage(isset($_GET['per_page']) ? $_GET['per_page'] : 50);
 
-$filter = array(
-    'date_from' => $dateKey,
-    'date_to' => $dateKey,
-    'month_key' => $monthKey,
-    'q' => $q,
-    'server' => $serverFilter,
-);
 $data = $sales->paginate($session, $filter, $page, $perPage, 'date', 'desc');
-$stats = $sales->stats($session, $serverFilter !== '' ? $serverFilter : null);
+$filterTotal = (int)$data['total'];
+$filterSum = (float)$data['sum'];
+$filterAvg = $filterTotal > 0 ? $filterSum / $filterTotal : 0.0;
 $status = $service->summary($session);
 $serverNames = $sales->serverNames($session);
+$yearKeys = $sales->yearKeys($session);
+$monthOptions = \Mikhmon\Support\SalesFilter::months();
+$yearOptions = array_values(array_unique(array_merge($yearKeys, array(date('Y')))));
+rsort($yearOptions);
 $csrf = \Mikhmon\Http\Csrf::token();
 
-$baseQuery = array('report' => 'selling', 'session' => $session);
-if ($dateKey !== null) {
-    $baseQuery['date_key'] = $dateKey;
-}
-if ($monthKey !== null) {
-    $baseQuery['month_key'] = $monthKey;
-}
-if ($q !== '') {
-    $baseQuery['q'] = $q;
-}
-if ($serverFilter !== '') {
-    $baseQuery['server'] = $serverFilter;
-}
+$baseQuery = \Mikhmon\Support\SalesFilter::query($filterMeta, $session);
 $baseUrl = './?' . http_build_query($baseQuery);
-$periodLabel = $dateKey !== null
-    ? date('d M Y', strtotime($dateKey))
-    : ($monthKey !== null ? date('F Y', strtotime($monthKey . '-01')) : 'Semua data');
+$periodLabel = \Mikhmon\Support\SalesFilter::label($filterMeta);
 
 // Explicit delete: local DB and/or router scripts for the current filter.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_data'])) {
@@ -116,8 +93,6 @@ if (strpos($notice, 'deleted:') === 0) {
     $noticeHtml = mikhmon_alert('warning', 'Hapus script MikroTik tidak diizinkan saat filter pencarian aktif. Hapus per tanggal/bulan.');
 }
 
-$delta = $stats['month_sum'] - $stats['prev_sum'];
-$deltaPct = $stats['prev_sum'] > 0 ? ($delta / $stats['prev_sum'] * 100) : ($stats['month_sum'] > 0 ? 100 : 0);
 $fmt = function ($value) use ($currency, $decimals) {
     return mikhmon_money($value, $currency, $decimals);
 };
@@ -134,42 +109,31 @@ $actions = $syncButton
 
 <div class="mm-page">
   <?= $noticeHtml; ?>
-  <?= mikhmon_page_header('Laporan Penjualan', 'fa-money', $actions, 'Periode: <b>' . mikhmon_e($periodLabel) . '</b> &nbsp;|&nbsp; ' . mikhmon_source_badge($status)); ?>
+  <?= mikhmon_page_header('Laporan Penjualan', 'fa-money', $actions, 'Periode: <b>' . mikhmon_e($periodLabel) . '</b> &nbsp;|&nbsp; <b>' . number_format($filterTotal, 0, ',', '.') . '</b> transaksi · <b>' . mikhmon_e($fmt($filterSum)) . '</b> &nbsp;|&nbsp; ' . mikhmon_source_badge($status)); ?>
 
   <div class="mm-kpi-grid">
     <div class="mm-kpi">
-      <div class="mm-kpi-icon bg-primary"><i class="fa fa-money"></i></div>
-      <div class="mm-kpi-body">
-        <div class="mm-kpi-label">Bulan Ini</div>
-        <div class="mm-kpi-value"><?= mikhmon_e($fmt($stats['month_sum'])); ?></div>
-        <div class="mm-kpi-note">
-          <span class="<?= $delta >= 0 ? 'text-green' : 'text-red'; ?>"><i class="fa fa-arrow-<?= $delta >= 0 ? 'up' : 'down'; ?>"></i> <?= number_format(abs($deltaPct), 1, ',', '.'); ?>%</span>
-          (<?= ($delta >= 0 ? '+' : '-') . mikhmon_e($fmt(abs($delta))); ?>) dari bulan lalu
-        </div>
-      </div>
-    </div>
-    <div class="mm-kpi">
-      <div class="mm-kpi-icon bg-green"><i class="fa fa-calendar-check-o"></i></div>
-      <div class="mm-kpi-body">
-        <div class="mm-kpi-label">Hari Ini</div>
-        <div class="mm-kpi-value"><?= mikhmon_e($fmt($stats['today_sum'])); ?></div>
-        <div class="mm-kpi-note"><?= number_format($stats['today_count'], 0, ',', '.'); ?> voucher terjual</div>
-      </div>
-    </div>
-    <div class="mm-kpi">
       <div class="mm-kpi-icon bg-indigo"><i class="fa fa-ticket"></i></div>
       <div class="mm-kpi-body">
-        <div class="mm-kpi-label">Voucher Keseluruhan</div>
-        <div class="mm-kpi-value"><?= number_format($stats['total_count'], 0, ',', '.'); ?></div>
-        <div class="mm-kpi-note">total voucher tercatat</div>
+        <div class="mm-kpi-label">Total Transaksi</div>
+        <div class="mm-kpi-value"><?= number_format($filterTotal, 0, ',', '.'); ?></div>
+        <div class="mm-kpi-note">berdasarkan filter aktif</div>
       </div>
     </div>
     <div class="mm-kpi">
-      <div class="mm-kpi-icon bg-blue"><i class="fa fa-database"></i></div>
+      <div class="mm-kpi-icon bg-primary"><i class="fa fa-money"></i></div>
       <div class="mm-kpi-body">
-        <div class="mm-kpi-label">Nominal Keseluruhan</div>
-        <div class="mm-kpi-value"><?= mikhmon_e($fmt($stats['total_sum'])); ?></div>
-        <div class="mm-kpi-note">total penjualan tercatat</div>
+        <div class="mm-kpi-label">Total Nominal</div>
+        <div class="mm-kpi-value"><?= mikhmon_e($fmt($filterSum)); ?></div>
+        <div class="mm-kpi-note">total uang berdasarkan filter</div>
+      </div>
+    </div>
+    <div class="mm-kpi">
+      <div class="mm-kpi-icon bg-green"><i class="fa fa-calculator"></i></div>
+      <div class="mm-kpi-body">
+        <div class="mm-kpi-label">Rata-rata / Transaksi</div>
+        <div class="mm-kpi-value"><?= mikhmon_e($fmt($filterAvg)); ?></div>
+        <div class="mm-kpi-note">nominal dibagi jumlah transaksi</div>
       </div>
     </div>
   </div>
@@ -178,7 +142,7 @@ $actions = $syncButton
     <div class="mm-card-head">
       <h2><i class="fa fa-list"></i> <?= mikhmon_e($periodLabel); ?></h2>
       <div class="mm-page-actions">
-        <span class="mm-muted">Total: <b><?= number_format($data['total'], 0, ',', '.'); ?></b> transaksi</span>
+        <span class="mm-muted">Total: <b><?= number_format($filterTotal, 0, ',', '.'); ?></b> transaksi · <b><?= mikhmon_e($fmt($filterSum)); ?></b></span>
       </div>
     </div>
     <div class="mm-card-body">
@@ -186,16 +150,31 @@ $actions = $syncButton
         <input type="hidden" name="report" value="selling">
         <input type="hidden" name="session" value="<?= mikhmon_e($session); ?>">
         <div class="mm-field">
-          <label for="f-date">Tanggal</label>
-          <input class="mm-input" id="f-date" type="date" name="date_key" value="<?= mikhmon_e($dateKey !== null ? $dateKey : ''); ?>">
+          <label for="f-date-from">Dari tanggal</label>
+          <input class="mm-input" id="f-date-from" type="date" name="date_from" value="<?= mikhmon_e($dateFrom !== null ? $dateFrom : ''); ?>">
         </div>
         <div class="mm-field">
-          <label for="f-month">Bulan</label>
-          <input class="mm-input" id="f-month" type="month" name="month_key" value="<?= mikhmon_e($monthKey !== null ? $monthKey : ''); ?>">
+          <label for="f-date-to">Sampai tanggal</label>
+          <input class="mm-input" id="f-date-to" type="date" name="date_to" value="<?= mikhmon_e($dateTo !== null ? $dateTo : ''); ?>">
         </div>
         <div class="mm-field">
-          <label for="f-q">Cari</label>
-          <input class="mm-input" id="f-q" type="search" name="q" value="<?= mikhmon_e($q); ?>" placeholder="username / komentar / profil">
+          <label for="f-month-name">Bulan</label>
+          <select class="mm-select" id="f-month-name" name="month_name">
+            <option value="">Semua bulan</option>
+            <?php foreach ($monthOptions as $mNum => $mLabel): ?>
+              <?php $mValue = str_pad((string)$mNum, 2, '0', STR_PAD_LEFT); ?>
+              <option value="<?= mikhmon_e($mValue); ?>" <?= $monthName === $mValue ? 'selected' : ''; ?>><?= mikhmon_e($mLabel); ?></option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+        <div class="mm-field">
+          <label for="f-year">Tahun</label>
+          <select class="mm-select" id="f-year" name="year">
+            <option value="">Semua tahun</option>
+            <?php foreach ($yearOptions as $y): ?>
+              <option value="<?= mikhmon_e($y); ?>" <?= $year === $y ? 'selected' : ''; ?>><?= mikhmon_e($y); ?></option>
+            <?php endforeach; ?>
+          </select>
         </div>
         <div class="mm-field">
           <label for="f-server">Server</label>
@@ -206,6 +185,10 @@ $actions = $syncButton
               <option value="<?= mikhmon_e($srvValue); ?>" <?= $serverFilter === $srvValue ? 'selected' : ''; ?>><?= $srv === '' ? 'Tanpa server (data lama)' : mikhmon_e($srv); ?></option>
             <?php endforeach; ?>
           </select>
+        </div>
+        <div class="mm-field">
+          <label for="f-q">Cari</label>
+          <input class="mm-input" id="f-q" type="search" name="q" value="<?= mikhmon_e($q); ?>" placeholder="username / komentar / profil">
         </div>
         <button class="btn bg-primary" type="submit"><i class="fa fa-search"></i> Filter</button>
         <a class="btn bg-secondary" href="./?report=selling&session=<?= mikhmon_e($session); ?>"><i class="fa fa-eraser"></i> Reset</a>
@@ -286,7 +269,7 @@ $actions = $syncButton
       <input type="hidden" name="delete_data" value="1">
       <p class="mm-muted">Filter aktif: <b><?= mikhmon_e($periodLabel); ?></b><?= $q !== '' ? ' · pencarian: ' . mikhmon_e($q) : ''; ?></p>
       <label style="display:block;font-weight:normal;"><input type="checkbox" name="del_db" value="1" checked> Hapus dari <b>database</b></label>
-      <label style="display:block;font-weight:normal;"><input type="checkbox" name="del_router" value="1"> Hapus <b>script di MikroTik</b> (lambat, hanya filter tanggal/bulan)</label>
+      <label style="display:block;font-weight:normal;"><input type="checkbox" name="del_router" value="1"> Hapus <b>script di MikroTik</b> (lambat, mengikuti filter tanggal/bulan/server)</label>
       <hr style="border:none;border-top:1px solid #ccc;margin:8px 0;">
       <label style="display:block;font-weight:normal;"><input type="radio" name="del_scope" value="view" checked> Hanya data yang sedang terfilter</label>
       <label style="display:block;font-weight:normal;"><input type="radio" name="del_scope" value="all"> Semua data sesi ini</label>

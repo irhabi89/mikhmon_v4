@@ -92,6 +92,8 @@ final class SalesRepository
             'date_from' => null,
             'date_to' => null,
             'month_key' => null,
+            'month_name' => null,
+            'year' => null,
             'q' => null,
             'username_prefix' => null,
             'server' => null,
@@ -104,6 +106,15 @@ final class SalesRepository
         }
         if (!empty($filter['month_key']) && preg_match('/^\d{4}-\d{2}$/', (string)$filter['month_key'])) {
             $out['month_key'] = (string)$filter['month_key'];
+        }
+        if (!empty($filter['month_name'])) {
+            $m = (int)$filter['month_name'];
+            if ($m >= 1 && $m <= 12) {
+                $out['month_name'] = str_pad((string)$m, 2, '0', STR_PAD_LEFT);
+            }
+        }
+        if (!empty($filter['year']) && preg_match('/^\d{4}$/', (string)$filter['year'])) {
+            $out['year'] = (string)$filter['year'];
         }
         if (isset($filter['q'])) {
             $q = trim((string)$filter['q']);
@@ -148,6 +159,14 @@ final class SalesRepository
         if (!empty($filter['month_key'])) {
             $where .= ' AND month_key = ?';
             $params[] = $filter['month_key'];
+        }
+        if (!empty($filter['month_name'])) {
+            $where .= ' AND substr(date_key, 6, 2) = ?';
+            $params[] = $filter['month_name'];
+        }
+        if (!empty($filter['year'])) {
+            $where .= ' AND substr(date_key, 1, 4) = ?';
+            $params[] = $filter['year'];
         }
         if (!empty($filter['username_prefix'])) {
             $where .= " AND username LIKE ? ESCAPE '\\'";
@@ -381,6 +400,25 @@ final class SalesRepository
                 'month_count' => (int)$row['month_count'],
                 'month_sum' => (float)$row['month_sum'],
             );
+        }
+        return $out;
+    }
+
+    /**
+     * @return array<int,string>
+     */
+    public function yearKeys(string $session): array
+    {
+        $rows = $this->db->fetchAll(
+            'SELECT DISTINCT substr(date_key, 1, 4) AS y FROM sales_records WHERE session = ? ORDER BY y DESC',
+            array($session)
+        );
+        $out = array();
+        foreach ($rows as $row) {
+            $y = (string)$row['y'];
+            if (preg_match('/^\d{4}$/', $y)) {
+                $out[] = $y;
+            }
         }
         return $out;
     }
