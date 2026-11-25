@@ -47,6 +47,9 @@ $data = $sales->paginate($session, $filter, $page, $perPage, 'date', 'desc');
 $filterTotal = (int)$data['total'];
 $filterSum = (float)$data['sum'];
 $filterAvg = $filterTotal > 0 ? $filterSum / $filterTotal : 0.0;
+$stats = $sales->stats($session, $serverFilter !== '' ? $serverFilter : null);
+$delta = $stats['month_sum'] - $stats['prev_sum'];
+$deltaPct = $stats['prev_sum'] > 0 ? ($delta / $stats['prev_sum'] * 100) : ($stats['month_sum'] > 0 ? 100 : 0);
 $status = $service->summary($session);
 $serverNames = $sales->serverNames($session);
 $yearKeys = $sales->yearKeys($session);
@@ -113,27 +116,38 @@ $actions = $syncButton
 
   <div class="mm-kpi-grid">
     <div class="mm-kpi">
-      <div class="mm-kpi-icon bg-indigo"><i class="fa fa-ticket"></i></div>
-      <div class="mm-kpi-body">
-        <div class="mm-kpi-label">Total Transaksi</div>
-        <div class="mm-kpi-value"><?= number_format($filterTotal, 0, ',', '.'); ?></div>
-        <div class="mm-kpi-note">berdasarkan filter aktif</div>
-      </div>
-    </div>
-    <div class="mm-kpi">
       <div class="mm-kpi-icon bg-primary"><i class="fa fa-money"></i></div>
       <div class="mm-kpi-body">
-        <div class="mm-kpi-label">Total Nominal</div>
-        <div class="mm-kpi-value"><?= mikhmon_e($fmt($filterSum)); ?></div>
-        <div class="mm-kpi-note">total uang berdasarkan filter</div>
+        <div class="mm-kpi-label">Bulan Ini</div>
+        <div class="mm-kpi-value"><?= mikhmon_e($fmt($stats['month_sum'])); ?></div>
+        <div class="mm-kpi-note">
+          <span class="<?= $delta >= 0 ? 'text-green' : 'text-red'; ?>"><i class="fa fa-arrow-<?= $delta >= 0 ? 'up' : 'down'; ?>"></i> <?= number_format(abs($deltaPct), 1, ',', '.'); ?>%</span>
+          (<?= ($delta >= 0 ? '+' : '-') . mikhmon_e($fmt(abs($delta))); ?>) dari bulan lalu
+        </div>
       </div>
     </div>
     <div class="mm-kpi">
-      <div class="mm-kpi-icon bg-green"><i class="fa fa-calculator"></i></div>
+      <div class="mm-kpi-icon bg-green"><i class="fa fa-calendar-check-o"></i></div>
       <div class="mm-kpi-body">
-        <div class="mm-kpi-label">Rata-rata / Transaksi</div>
-        <div class="mm-kpi-value"><?= mikhmon_e($fmt($filterAvg)); ?></div>
-        <div class="mm-kpi-note">nominal dibagi jumlah transaksi</div>
+        <div class="mm-kpi-label">Hari Ini</div>
+        <div class="mm-kpi-value"><?= mikhmon_e($fmt($stats['today_sum'])); ?></div>
+        <div class="mm-kpi-note"><?= number_format($stats['today_count'], 0, ',', '.'); ?> voucher terjual</div>
+      </div>
+    </div>
+    <div class="mm-kpi">
+      <div class="mm-kpi-icon bg-indigo"><i class="fa fa-ticket"></i></div>
+      <div class="mm-kpi-body">
+        <div class="mm-kpi-label">Voucher Keseluruhan</div>
+        <div class="mm-kpi-value"><?= number_format($stats['total_count'], 0, ',', '.'); ?></div>
+        <div class="mm-kpi-note">total voucher tercatat</div>
+      </div>
+    </div>
+    <div class="mm-kpi">
+      <div class="mm-kpi-icon bg-blue"><i class="fa fa-database"></i></div>
+      <div class="mm-kpi-body">
+        <div class="mm-kpi-label">Nominal Keseluruhan</div>
+        <div class="mm-kpi-value"><?= mikhmon_e($fmt($stats['total_sum'])); ?></div>
+        <div class="mm-kpi-note">total penjualan tercatat</div>
       </div>
     </div>
   </div>
