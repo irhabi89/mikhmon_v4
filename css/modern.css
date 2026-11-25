@@ -1,0 +1,192 @@
+/*
+ * Modern shell/component overrides for the existing Mikhmon pages.
+ * Loaded after the theme and shared layer. Colors come from theme variables.
+ */
+:root {
+  --mm-radius-lg: 12px;
+  --mm-shadow: 0 8px 24px rgba(0, 0, 0, .14);
+  --mm-shadow-sm: 0 2px 8px rgba(0, 0, 0, .10);
+  --mm-control-h: 38px;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Top bar */
+.navbar {
+  height: 60px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--mm-border);
+  background: var(--mm-surface) !important;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, .04);
+}
+.navbar-left a, .navbar-right a { padding: 18px 12px; font-size: 14px; }
+.navbar-right .ses, .navbar-right .dropd {
+  margin: 12px 5px 0 0;
+  border-radius: 7px;
+  border: 1px solid var(--mm-border);
+  background: var(--mm-surface-2);
+  color: var(--mm-text);
+  min-height: 34px;
+}
+
+/* Sidebar */
+.sidenav {
+  margin-top: 60px;
+  width: 230px;
+  padding: 10px 8px 26px;
+  border-right: 1px solid var(--mm-border);
+  background: var(--mm-surface) !important;
+  overflow-y: auto;
+}
+.sidenav .card-header { padding: 8px 10px 14px; background: transparent !important; border: 0; }
+.sidenav a, .dropdown-btn {
+  width: 100%;
+  margin: 2px 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  color: var(--mm-text) !important;
+}
+.sidenav a:hover, .dropdown-btn:hover { background: var(--mm-surface-2) !important; color: var(--mm-text) !important; }
+.sidenav .active { background: color-mix(in srgb, var(--mm-primary) 18%, transparent) !important; color: var(--mm-text) !important; }
+.sidenav i { font-size: 16px; padding: 0 8px 0 0; margin-right: 2px; }
+.dropdown-container a { padding-left: 24px !important; }
+
+/* Content */
+#main { margin-top: 60px; transition: margin-left .2s ease; }
+.main-container { padding: 18px; max-width: 1600px; margin: 0 auto; }
+.card {
+  border: 1px solid var(--mm-border);
+  border-radius: var(--mm-radius-lg);
+  background: var(--mm-surface);
+  box-shadow: var(--mm-shadow-sm);
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+.card-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--mm-border);
+  background: var(--mm-surface) !important;
+}
+.card-header h3, .card-title { font-size: 15px; font-weight: 700; margin: 0; color: var(--mm-text); }
+.card-header h3 i { color: var(--mm-primary); }
+.card-body { padding: 16px; }
+.box {
+  border-radius: var(--mm-radius-lg);
+  border: 1px solid transparent;
+  box-shadow: var(--mm-shadow-sm);
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+.box:hover { transform: translateY(-1px); box-shadow: var(--mm-shadow); }
+.box h1 { font-size: 26px; line-height: 1.15; font-weight: 700; }
+.box-group-icon { font-size: 26px; border-radius: 12px; }
+.box-group-area { font-size: 13px; }
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 6px 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  text-decoration: none !important;
+  transition: filter .15s ease, box-shadow .15s ease;
+}
+.btn:hover { filter: brightness(1.08); box-shadow: var(--mm-shadow-sm); }
+.btn.bg-secondary, .btn.bg-grey { border-color: var(--mm-border); }
+.btn-sm { min-height: 30px; padding: 4px 9px; font-size: 12px; }
+
+/* Forms */
+.form-control, .group-item, input[type="text"], input[type="password"], input[type="number"],
+input[type="search"], input[type="date"], input[type="month"], select, textarea {
+  min-height: var(--mm-control-h);
+  padding: 7px 10px;
+  border: 1px solid var(--mm-border);
+  border-radius: 8px;
+  background: var(--mm-surface-2);
+  color: var(--mm-text);
+  font-size: 13px;
+  outline: none;
+}
+.form-control:focus, .group-item:focus, input:focus, select:focus, textarea:focus {
+  border-color: var(--mm-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mm-primary) 20%, transparent);
+}
+select { cursor: pointer; }
+.input-group { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.input-group > div[class*="input-group-"] { float: none; width: auto; flex: 1 1 130px; }
+.input-group .group-item-l, .input-group .group-item-md, .input-group .group-item-r { width: 100%; }
+table .form-control { min-height: 34px; }
+
+/* Tables */
+.table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  color: var(--mm-text);
+  font-size: 13px;
+}
+.table th, .table td { padding: 10px 12px; border-bottom: 1px solid var(--mm-border); vertical-align: middle; }
+.table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--mm-surface-2);
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  color: var(--mm-muted);
+  white-space: nowrap;
+}
+.table-bordered td, .table-bordered th { border: 0 !important; border-bottom: 1px solid var(--mm-border) !important; }
+.table-hover:hover tbody tr:hover, .table-hover tbody tr:hover { background: var(--mm-surface-2); }
+.overflow { overflow: auto; border-radius: 10px; }
+.text-nowrap { white-space: nowrap; }
+
+/* Alerts / loaders */
+.mm-alert, .alert { border-radius: 9px; }
+.lds-dual-ring { margin: 20px auto; }
+
+/* Modals */
+.modal-window > div {
+  border-radius: 14px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .35);
+  background: var(--mm-surface);
+  color: var(--mm-text);
+  padding: 18px;
+  max-width: 620px;
+}
+.modal-window header h1 { font-size: 17px; margin: 0 0 8px; }
+.modal-window p { margin: 8px 0; }
+
+/* Make old multi-column pages usable on tablets/phones */
+@media (max-width: 1000px) {
+  #main { margin-left: 0 !important; }
+  .main-container { padding: 10px; }
+  .col-3, .col-4, .col-5, .col-6, .col-7, .col-8, .col-9, .col-10, .col-11,
+  .col-box-3, .col-box-4, .col-box-6 {
+    width: 100% !important;
+    float: none !important;
+  }
+  .card-body { padding: 10px; }
+  .card-header { padding: 10px 12px; }
+  .table th, .table td { padding: 8px 9px; }
+  .btn { min-height: 36px; }
+}
+@media (max-width: 600px) {
+  .navbar-right a { padding: 18px 8px; }
+  .main-container { padding: 6px; }
+  .box h1 { font-size: 22px; }
+  .modal-window > div { width: 94%; margin: 10% auto; border-radius: 12px; }
+}

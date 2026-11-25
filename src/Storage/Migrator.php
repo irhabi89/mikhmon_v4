@@ -14,7 +14,7 @@ use Mikhmon\Router\RouterTarget;
  */
 final class Migrator
 {
-    public const VERSION = 3;
+    public const VERSION = 4;
 
     /** @var Database */
     private $db;
@@ -96,6 +96,20 @@ final class Migrator
         if ($version < 3) {
             $pdo->exec($this->readSql('003_queue_index.sql'));
             $notes[] = 'applied 003_queue_index.sql';
+        }
+
+        // 5. Per-server sales reporting.
+        if ($version < 4) {
+            if (!$this->columnExists('sales_records', 'server_name')) {
+                $pdo->exec("ALTER TABLE sales_records ADD COLUMN server_name TEXT NOT NULL DEFAULT ''");
+                $notes[] = 'added sales_records.server_name';
+            }
+            if (!$this->columnExists('sales_router_records', 'server_name')) {
+                $pdo->exec("ALTER TABLE sales_router_records ADD COLUMN server_name TEXT NOT NULL DEFAULT ''");
+                $notes[] = 'added sales_router_records.server_name';
+            }
+            $pdo->exec($this->readSql('004_server.sql'));
+            $notes[] = 'applied 004_server.sql';
         }
 
         // 3. Add port_host to existing sessions and split host:port values.

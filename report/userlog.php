@@ -37,17 +37,20 @@ if ($dateKey !== null) {
     $monthKey = null;
 }
 $q = isset($_GET['q']) ? trim((string)$_GET['q']) : '';
+$serverFilter = isset($_GET['server']) ? trim((string)$_GET['server']) : '';
 $page = \Mikhmon\Support\Pagination::page(isset($_GET['page']) ? $_GET['page'] : 1);
 $perPage = \Mikhmon\Support\Pagination::perPage(isset($_GET['per_page']) ? $_GET['per_page'] : 50);
 
-$filter = array('date_from' => $dateKey, 'date_to' => $dateKey, 'month_key' => $monthKey, 'q' => $q);
+$filter = array('date_from' => $dateKey, 'date_to' => $dateKey, 'month_key' => $monthKey, 'q' => $q, 'server' => $serverFilter);
 $sales = new \Mikhmon\Storage\SalesRepository($db);
+$serverNames = $sales->serverNames($session);
 $data = $sales->paginate($session, $filter, $page, $perPage, 'date', 'desc');
 
 $baseQuery = array('report' => 'userlog', 'session' => $session);
 if ($dateKey !== null) { $baseQuery['date_key'] = $dateKey; }
 if ($monthKey !== null) { $baseQuery['month_key'] = $monthKey; }
 if ($q !== '') { $baseQuery['q'] = $q; }
+if ($serverFilter !== '') { $baseQuery['server'] = $serverFilter; }
 $baseUrl = './?' . http_build_query($baseQuery);
 $periodLabel = $dateKey !== null
     ? date('d M Y', strtotime($dateKey))
@@ -81,6 +84,16 @@ $csvUrl = './process/export_sales.php?' . http_build_query(array_merge($baseQuer
           <label for="ul-q">Cari</label>
           <input class="mm-input" id="ul-q" type="search" name="q" value="<?= mikhmon_e($q); ?>" placeholder="username / komentar / profil">
         </div>
+        <div class="mm-field">
+          <label for="ul-server">Server</label>
+          <select class="mm-select" id="ul-server" name="server">
+            <option value="">Semua server</option>
+            <?php foreach ($serverNames as $srv): ?>
+              <?php $srvValue = $srv === '' ? '__none__' : $srv; ?>
+              <option value="<?= mikhmon_e($srvValue); ?>" <?= $serverFilter === $srvValue ? 'selected' : ''; ?>><?= $srv === '' ? 'Tanpa server (data lama)' : mikhmon_e($srv); ?></option>
+            <?php endforeach; ?>
+          </select>
+        </div>
         <button class="btn bg-primary" type="submit"><i class="fa fa-search"></i> Filter</button>
         <a class="btn bg-secondary" href="./?report=userlog&session=<?= mikhmon_e($session); ?>"><i class="fa fa-eraser"></i> Reset</a>
         <span class="mm-per-page"><?= mikhmon_per_page($data['perPage'], $baseUrl); ?></span>
@@ -96,6 +109,7 @@ $csvUrl = './process/export_sales.php?' . http_build_query(array_merge($baseQuer
                 <th>No</th>
                 <th>Tanggal</th>
                 <th>Jam</th>
+                <th>Server</th>
                 <th>Username</th>
                 <th>Profil</th>
                 <th>Alamat</th>
@@ -110,6 +124,7 @@ $csvUrl = './process/export_sales.php?' . http_build_query(array_merge($baseQuer
                   <td><?= (int)(($data['page'] - 1) * $data['perPage'] + $i + 1); ?></td>
                   <td><?= mikhmon_e($row['date_key']); ?></td>
                   <td><?= mikhmon_e($row['time_key']); ?></td>
+                  <td><?= mikhmon_e($row['server_name']); ?></td>
                   <td><?= mikhmon_e($row['username']); ?></td>
                   <td><?= mikhmon_e($row['profile']); ?></td>
                   <td><?= mikhmon_e($row['address']); ?></td>

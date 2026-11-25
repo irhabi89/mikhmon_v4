@@ -44,12 +44,14 @@ if ($dateKey !== null) {
     $monthKey = null;
 }
 $q = isset($_GET['q']) ? trim((string)$_GET['q']) : '';
+$serverFilter = isset($_GET['server']) ? trim((string)$_GET['server']) : '';
 
 $filter = array(
     'date_from' => $dateKey,
     'date_to' => $dateKey,
     'month_key' => $monthKey,
     'q' => $q,
+    'server' => $serverFilter,
 );
 $sales = new \Mikhmon\Storage\SalesRepository($db);
 $total = $sales->countFiltered($session, $filter);
@@ -65,6 +67,7 @@ $csvUrl = './process/export_sales.php?' . http_build_query(array(
     'date_key' => $dateKey,
     'month_key' => $monthKey,
     'q' => $q,
+    'server' => $serverFilter,
     'token' => \Mikhmon\Http\Csrf::token(),
 ));
 $backUrl = './?report=selling&session=' . urlencode($session);
@@ -117,6 +120,7 @@ $backUrl = './?report=selling&session=' . urlencode($session);
       <th>No</th>
       <th>Tanggal</th>
       <th>Jam</th>
+      <th>Server</th>
       <th>Username</th>
       <th>Profil</th>
       <th>Komentar</th>
@@ -135,6 +139,7 @@ $backUrl = './?report=selling&session=' . urlencode($session);
         echo '<td>' . $n . '</td>';
         echo '<td>' . mikhmon_e($data['date_key']) . '</td>';
         echo '<td>' . mikhmon_e($data['time_key']) . '</td>';
+        echo '<td>' . mikhmon_e($data['server_name']) . '</td>';
         echo '<td>' . mikhmon_e($data['username']) . '</td>';
         echo '<td>' . mikhmon_e($data['profile']) . '</td>';
         echo '<td>' . mikhmon_e($data['sale_comment']) . '</td>';
@@ -142,13 +147,13 @@ $backUrl = './?report=selling&session=' . urlencode($session);
         echo '</tr>';
     }
     if ($n === 0) {
-        echo '<tr><td colspan="7" style="text-align:center;">Tidak ada data.</td></tr>';
+        echo '<tr><td colspan="8" style="text-align:center;">Tidak ada data.</td></tr>';
     }
     ?>
   </tbody>
   <tfoot>
     <tr>
-      <td colspan="6" style="text-align:right;">Total</td>
+      <td colspan="7" style="text-align:right;">Total</td>
       <td class="num"><?= mikhmon_e($fmt($sum)); ?></td>
     </tr>
   </tfoot>

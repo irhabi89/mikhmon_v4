@@ -14,6 +14,8 @@ namespace Mikhmon\Support;
  */
 final class RecordParser
 {
+    public const SERVER_MARKER = '|#MMSRV1#|';
+
     /** @var string[] */
     private static $months = array(
         'jan' => '01', 'feb' => '02', 'mar' => '03', 'apr' => '04',
@@ -30,6 +32,14 @@ final class RecordParser
         if ($name === '') {
             return null;
         }
+
+        $serverName = '';
+        $markerPos = strrpos($name, self::SERVER_MARKER);
+        if ($markerPos !== false) {
+            $serverName = trim(substr($name, $markerPos + strlen(self::SERVER_MARKER)));
+            $name = trim(substr($name, 0, $markerPos));
+        }
+
         $cols = explode('-|-', $name, 9);
         if (count($cols) < 9) {
             return null;
@@ -62,6 +72,7 @@ final class RecordParser
             'validity' => trim((string)$cols[6]),
             'profile' => trim((string)$cols[7]),
             'sale_comment' => trim((string)$cols[8]),
+            'server_name' => $serverName,
         );
     }
 

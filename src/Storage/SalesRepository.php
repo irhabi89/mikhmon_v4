@@ -33,13 +33,14 @@ final class SalesRepository
     public function insertParsed(string $session, string $name, array $parsed, string $rosScriptId = '', string $scriptComment = ''): bool
     {
         $sql = 'INSERT OR IGNORE INTO sales_records
-            (session, name, ros_script_id, source_date, date_key, month_key, time_key,
+            (session, name, ros_script_id, server_name, source_date, date_key, month_key, time_key,
              username, profile, sale_comment, address, mac, validity, price, price_raw, script_comment)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)';
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)';
         $params = array(
             $session,
             $name,
             $rosScriptId,
+            isset($parsed['server_name']) ? (string)$parsed['server_name'] : '',
             isset($parsed['source_date']) ? $parsed['source_date'] : '',
             $parsed['date_key'],
             $parsed['month_key'],
@@ -93,6 +94,7 @@ final class SalesRepository
             'month_key' => null,
             'q' => null,
             'username_prefix' => null,
+            'server' => null,
         );
         if (!empty($filter['date_from']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$filter['date_from'])) {
             $out['date_from'] = (string)$filter['date_from'];
@@ -112,6 +114,10 @@ final class SalesRepository
         if (!empty($filter['username_prefix'])) {
             $out['username_prefix'] = trim((string)$filter['username_prefix']);
         }
+        if (isset($filter['server']) && $filter['server'] !== '') {
+            $server = trim((string)$filter['server']);
+            $out['server'] = substr($server, 0, 128);
+        }
         return $out;
     }
 
@@ -123,6 +129,14 @@ final class SalesRepository
     {
         $where = 'session = ?';
         $params = array($session);
+        if (!empty($filter['server'])) {
+            if ($filter['server'] === '__none__') {
+                $where .= " AND server_name = ''";
+            } else {
+                $where .= ' AND server_name = ?';
+                $params[] = $filter['server'];
+            }
+        }
         if (!empty($filter['date_from'])) {
             $where .= ' AND date_key >= ?';
             $params[] = $filter['date_from'];
@@ -204,7 +218,7 @@ final class SalesRepository
             $order = 'date_key ' . $direction . ', time_key ' . $direction . ', id ' . $direction;
         }
 
-        $sql = 'SELECT id, session, name, ros_script_id, source_date, date_key, month_key, time_key,
+        $sql = 'SELECT id, session, name, ros_script_id, server_name, source_date, date_key, month_key, time_key,
                     username, profile, sale_comment, address, mac, validity, price, price_raw,
                     script_comment, imported_at
                 FROM sales_records WHERE ' . $where . ' ORDER BY ' . $order
@@ -229,7 +243,7 @@ final class SalesRepository
         $filter = $this->normalizeFilter($filter);
         list($where, $params) = $this->buildWhere($session, $filter);
         $st = $this->db->pdo()->prepare(
-            'SELECT date_key, time_key, username, profile, sale_comment, address, mac, validity, price, name
+            'SELECT date_key, time_key, username, profile, sale_comment, address, mac, validity, price, server_name, name
              FROM sales_records WHERE ' . $where . ' ORDER BY date_key DESC, time_key DESC, id DESC'
         );
         $st->execute($params);
@@ -307,6 +321,56 @@ final class SalesRepository
         $out = array();
         foreach ($rows as $row) {
             $out[] = (string)$row['month_key'];
+        }
+        return $out;
+    }
+
+    /**
+     * @return array<int,string>
+     */
+    public function serverNames(string $session): array
+    {
+        $rows = $this->db->fetchAll(
+            'SELECT DISTINCT server_name FROM sales_records WHERE session = ? ORDER BY server_name',
+            array($session)
+        );
+        $out = array();
+        foreach ($rows as $row) {
+            $out[] = (string)$row['server_name'];
+        }
+        return $out;
+    }
+
+    /**
+     * Today/month sales grouped by server.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    public function serverStats(string $session): array
+    {
+        $today = date('Y-m-d');
+        $month = date('Y-m');
+        $rows = $this->db->fetchAll(
+            "SELECT CASE WHEN server_name = '' THEN '__none__' ELSE server_name END AS server_name,
+                    COUNT(*) AS total_count,
+                    COALESCE(SUM(CASE WHEN date_key = ? THEN 1 ELSE 0 END),0) AS today_count,
+                    COALESCE(SUM(CASE WHEN date_key = ? THEN price ELSE 0 END),0) AS today_sum,
+                    COALESCE(SUM(CASE WHEN month_key = ? THEN 1 ELSE 0 END),0) AS month_count,
+                    COALESCE(SUM(CASE WHEN month_key = ? THEN price ELSE 0 END),0) AS month_sum
+             FROM sales_records WHERE session = ?
+             GROUP BY server_name ORDER BY server_name",
+            array($today, $today, $month, $month, $session)
+        );
+        $out = array();
+        foreach ($rows as $row) {
+            $out[] = array(
+                'server_name' => (string)$row['server_name'],
+                'total_count' => (int)$row['total_count'],
+                'today_count' => (int)$row['today_count'],
+                'today_sum' => (float)$row['today_sum'],
+                'month_count' => (int)$row['month_count'],
+                'month_sum' => (float)$row['month_sum'],
+            );
         }
         return $out;
     }

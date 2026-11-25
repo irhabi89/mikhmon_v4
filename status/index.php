@@ -61,6 +61,7 @@ if ($currency == in_array($currency, $cekindo['indo'])) {
 <!-- Mikhmon UI -->
 <link rel="stylesheet" href="../css/mikhmon-ui.<?= $theme; ?>.min.css">
 <link rel="stylesheet" href="../css/mikhmon-ui.shared.css?v=<?= is_file(__DIR__ . '/../css/mikhmon-ui.shared.css') ? filemtime(__DIR__ . '/../css/mikhmon-ui.shared.css') : '1'; ?>">
+<link rel="stylesheet" href="../css/modern.css">
 <link rel="icon" href="../img/favicon.png" />
 <script>
 function goBack() {

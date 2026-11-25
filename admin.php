@@ -185,6 +185,7 @@ if ($id == "login" || substr($url, -1) == "p") {
 }
 ?>
 <script src="js/mikhmon-ui.<?= $theme; ?>.min.js"></script>
+<script src="js/app.js?t=<?= file_exists("js/app.js") ? filemtime("js/app.js") : "1"; ?>"></script>
 <script src="js/mikhmon.js?t=<?= file_exists("js/mikhmon.js") ? filemtime("js/mikhmon.js") : "1"; ?>"></script>
 <?php if (file_exists('./include/info.php')) { include('./include/info.php'); } ?>
 </body>

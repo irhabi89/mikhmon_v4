@@ -72,6 +72,59 @@ if (!isset($_SESSION["mikhmon"])) {
     $hunit = "items";
   }
 
+  // Per-server overview: DB sales + live hotspot active/user counts.
+  require_once(__DIR__ . '/../include/bootstrap.php');
+  mikhmon_require_schema();
+  $dash_sales = new \Mikhmon\Storage\SalesRepository(mikhmon_database());
+  $dashSalesStats = array();
+  foreach ($dash_sales->serverStats($session) as $row) {
+    $dashSalesStats[(string)$row['server_name']] = $row;
+  }
+  $dashServerMap = array();
+  foreach ((array)$API->comm('/ip/hotspot/print', array('.proplist' => 'name')) as $srv) {
+    $name = isset($srv['name']) ? trim((string)$srv['name']) : '';
+    if ($name !== '' && !isset($dashServerMap[$name])) {
+      $dashServerMap[$name] = array('name' => $name, 'active' => 0, 'users' => 0);
+    }
+  }
+  foreach ((array)$API->comm('/ip/hotspot/active/print', array('.proplist' => 'server')) as $act) {
+    $name = isset($act['server']) ? trim((string)$act['server']) : '';
+    if ($name === '') { continue; }
+    if (!isset($dashServerMap[$name])) { $dashServerMap[$name] = array('name' => $name, 'active' => 0, 'users' => 0); }
+    $dashServerMap[$name]['active']++;
+  }
+  foreach ((array)$API->comm('/ip/hotspot/user/print', array('.proplist' => 'server')) as $usr) {
+    $name = isset($usr['server']) ? trim((string)$usr['server']) : '';
+    if ($name === '' || $name === 'all') { continue; }
+    if (!isset($dashServerMap[$name])) { $dashServerMap[$name] = array('name' => $name, 'active' => 0, 'users' => 0); }
+    $dashServerMap[$name]['users']++;
+  }
+  foreach ($dashSalesStats as $name => $row) {
+    if ($name === '__none__') { continue; }
+    if (!isset($dashServerMap[$name])) { $dashServerMap[$name] = array('name' => $name, 'active' => 0, 'users' => 0); }
+  }
+  if (isset($dashSalesStats['__none__'])) {
+    $dashServerMap['__none__'] = array('name' => '__none__', 'active' => 0, 'users' => 0);
+  }
+  $dashServerRows = array();
+  foreach ($dashServerMap as $name => $base) {
+    $stats = isset($dashSalesStats[$name]) ? $dashSalesStats[$name] : null;
+    $dashServerRows[] = array(
+      'name' => $name,
+      'active' => (int)$base['active'],
+      'users' => (int)$base['users'],
+      'today_count' => $stats ? (int)$stats['today_count'] : 0,
+      'today_sum' => $stats ? (float)$stats['today_sum'] : 0.0,
+      'month_count' => $stats ? (int)$stats['month_count'] : 0,
+      'month_sum' => $stats ? (float)$stats['month_sum'] : 0.0,
+    );
+  }
+  $dash_spr_indo = (isset($cekindo['indo']) && is_array($cekindo['indo'])) ? $cekindo['indo'] : array('Rp');
+  $dash_spr_dec = in_array((string)(isset($currency) ? $currency : 'Rp'), $dash_spr_indo) ? 0 : 2;
+  $dash_spr_fmt = function ($v) use ($currency, $dash_spr_dec) {
+    return $currency . ' ' . number_format((float)$v, $dash_spr_dec, ',', '.');
+  };
+
   if ($livereport == "disable") {
     $logh = "457px";
     $lreport = "style='display:none;'";
@@ -246,6 +299,28 @@ if (!isset($_SESSION["mikhmon"])) {
             </div>
           </div>
           </div>
+            <div class="card" style="margin-top:10px;">
+              <div class="card-header"><h3><i class="fa fa-server"></i> Per Server</h3></div>
+              <div class="card-body">
+                <div class="row" style="display:flex;flex-wrap:wrap;">
+                  <?php foreach ($dashServerRows as $srv): ?>
+                    <?php $isNone = $srv['name'] === '__none__'; $srvName = $isNone ? 'Tanpa server (arsip)' : $srv['name']; ?>
+                    <div class="col-3 col-box-6" style="display:flex;flex-grow:1;">
+                      <div class="box bg-blue bmh-75" style="width:100%;">
+                        <a onclick="cancelPage()" href="./?report=selling&session=<?= urlencode($session); ?>&server=<?= urlencode($isNone ? '__none__' : $srv['name']); ?>" style="text-decoration:none;color:inherit;">
+                          <div style="font-size:12px;font-weight:bold;margin-bottom:4px;"><i class="fa fa-server"></i> <?= mikhmon_e($srvName); ?></div>
+                          <h1 style="margin:0;font-size:24px;"><?= number_format($srv['active'], 0, ',', '.'); ?> <span style="font-size:12px;">active</span></h1>
+                          <div style="font-size:12px;"><?= number_format($srv['users'], 0, ',', '.'); ?> user</div>
+                          <div style="font-size:12px;margin-top:4px;">Today: <b><?= mikhmon_e($dash_spr_fmt($srv['today_sum'])); ?></b> (<?= number_format($srv['today_count'], 0, ',', '.'); ?>)</div>
+                          <div style="font-size:12px;">Month: <b><?= mikhmon_e($dash_spr_fmt($srv['month_sum'])); ?></b> (<?= number_format($srv['month_count'], 0, ',', '.'); ?>)</div>
+                        </a>
+                      </div>
+                    </div>
+                  <?php endforeach; ?>
+                  <?php if (empty($dashServerRows)): ?><div class="col-12 pd-10">-</div><?php endif; ?>
+                </div>
+              </div>
+            </div>
             <div class="card">
               <div class="card-header"><h3><i class="fa fa-area-chart"></i> <?= $_traffic ?> </h3></div>
 

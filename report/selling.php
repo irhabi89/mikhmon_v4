@@ -47,6 +47,7 @@ if ($dateKey !== null) {
 }
 
 $q = isset($_GET['q']) ? trim((string)$_GET['q']) : (isset($_GET['prefix']) ? trim((string)$_GET['prefix']) : '');
+$serverFilter = isset($_GET['server']) ? trim((string)$_GET['server']) : '';
 $page = \Mikhmon\Support\Pagination::page(isset($_GET['page']) ? $_GET['page'] : 1);
 $perPage = \Mikhmon\Support\Pagination::perPage(isset($_GET['per_page']) ? $_GET['per_page'] : 50);
 
@@ -55,10 +56,12 @@ $filter = array(
     'date_to' => $dateKey,
     'month_key' => $monthKey,
     'q' => $q,
+    'server' => $serverFilter,
 );
 $data = $sales->paginate($session, $filter, $page, $perPage, 'date', 'desc');
 $stats = $sales->stats($session);
 $status = $service->summary($session);
+$serverNames = $sales->serverNames($session);
 $csrf = \Mikhmon\Http\Csrf::token();
 
 $baseQuery = array('report' => 'selling', 'session' => $session);
@@ -70,6 +73,9 @@ if ($monthKey !== null) {
 }
 if ($q !== '') {
     $baseQuery['q'] = $q;
+}
+if ($serverFilter !== '') {
+    $baseQuery['server'] = $serverFilter;
 }
 $baseUrl = './?' . http_build_query($baseQuery);
 $periodLabel = $dateKey !== null
@@ -191,6 +197,16 @@ $actions = $syncButton
           <label for="f-q">Cari</label>
           <input class="mm-input" id="f-q" type="search" name="q" value="<?= mikhmon_e($q); ?>" placeholder="username / komentar / profil">
         </div>
+        <div class="mm-field">
+          <label for="f-server">Server</label>
+          <select class="mm-select" id="f-server" name="server">
+            <option value="">Semua server</option>
+            <?php foreach ($serverNames as $srv): ?>
+              <?php $srvValue = $srv === '' ? '__none__' : $srv; ?>
+              <option value="<?= mikhmon_e($srvValue); ?>" <?= $serverFilter === $srvValue ? 'selected' : ''; ?>><?= $srv === '' ? 'Tanpa server (data lama)' : mikhmon_e($srv); ?></option>
+            <?php endforeach; ?>
+          </select>
+        </div>
         <button class="btn bg-primary" type="submit"><i class="fa fa-search"></i> Filter</button>
         <a class="btn bg-secondary" href="./?report=selling&session=<?= mikhmon_e($session); ?>"><i class="fa fa-eraser"></i> Reset</a>
         <span class="mm-per-page"><?= mikhmon_per_page($data['perPage'], $baseUrl); ?></span>
@@ -210,6 +226,7 @@ $actions = $syncButton
                 <th>No</th>
                 <th>Tanggal</th>
                 <th>Jam</th>
+                <th>Server</th>
                 <th>Username</th>
                 <th>Profil</th>
                 <th class="is-wrap">Komentar</th>
@@ -222,6 +239,7 @@ $actions = $syncButton
                   <td><?= (int)(($data['page'] - 1) * $data['perPage'] + $i + 1); ?></td>
                   <td><?= mikhmon_e($row['date_key']); ?></td>
                   <td><?= mikhmon_e($row['time_key']); ?></td>
+                  <td><?= mikhmon_e($row['server_name']); ?></td>
                   <td><?= mikhmon_e($row['username']); ?></td>
                   <td><?= mikhmon_e($row['profile']); ?></td>
                   <td class="is-wrap"><?= mikhmon_e($row['sale_comment']); ?></td>

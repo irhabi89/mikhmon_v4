@@ -98,6 +98,30 @@ final class SyncPipelineTest extends TestCase
         $this->assertSame(100.0, $reconcile['exact']);
     }
 
+    public function testServerFilterAndStats(): void
+    {
+        $sales = new SalesRepository($this->db);
+        $rows = array(
+            array('2026-11-19-|-10:00-|-u1-|-5000-|-a-|-m-|-1d-|-p-|-c|#MMSRV1#|hs-a', 'hs-a'),
+            array('2026-11-19-|-10:01-|-u2-|-7000-|-a-|-m-|-1d-|-p-|-c|#MMSRV1#|hs-b', 'hs-b'),
+            array('2026-11-19-|-10:02-|-u3-|-3000-|-a-|-m-|-1d-|-p-|-c', ''),
+        );
+        foreach ($rows as $row) {
+            $parsed = \Mikhmon\Support\RecordParser::parse($row[0]);
+            $this->assertSame($row[1], $parsed['server_name']);
+            $sales->insertParsed('s1', $row[0], $parsed, '', 'mikhmon');
+        }
+        $this->assertSame(array('', 'hs-a', 'hs-b'), $sales->serverNames('s1'));
+        $this->assertSame(1, $sales->countFiltered('s1', array('server' => 'hs-a')));
+        $this->assertSame(1, $sales->countFiltered('s1', array('server' => '__none__')));
+        $stats = $sales->serverStats('s1');
+        $this->assertCount(3, $stats);
+        $byName = array();
+        foreach ($stats as $stat) { $byName[$stat['server_name']] = $stat; }
+        $this->assertSame(1, $byName['hs-a']['total_count']);
+        $this->assertSame(1, $byName['__none__']['total_count']);
+    }
+
     public function testSameCountButDifferentRecordsIsNotOneHundredPercent(): void
     {
         $runs = new SyncRunRepository($this->db);

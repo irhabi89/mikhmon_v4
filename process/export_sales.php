@@ -62,13 +62,14 @@ header('Content-Disposition: attachment; filename="' . $filename . '"');
 header('Cache-Control: no-store');
 
 $out = fopen('php://output', 'w');
-fputcsv($out, array('date', 'time', 'username', 'profile', 'comment', 'address', 'mac', 'validity', 'price', 'name'), ',', '"', '');
+fputcsv($out, array('date', 'time', 'server', 'username', 'profile', 'comment', 'address', 'mac', 'validity', 'price', 'name'), ',', '"', '');
 $max = 1000000;
 $n = 0;
 while (($row = $st->fetch(PDO::FETCH_ASSOC)) !== false) {
     fputcsv($out, array(
         $row['date_key'],
         $row['time_key'],
+        $row['server_name'],
         $row['username'],
         $row['profile'],
         $row['sale_comment'],

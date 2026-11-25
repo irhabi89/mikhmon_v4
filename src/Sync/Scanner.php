@@ -219,10 +219,11 @@ final class Scanner
                 $parsed = RecordParser::parse($name);
                 if ($parsed === null) {
                     $invalid++;
-                    $batch[] = array($session, $name, $rosId, $comment, 'invalid', 'unparseable sales record name');
+                    $batch[] = array($session, $name, $rosId, $comment, '', 'invalid', 'unparseable sales record name');
                 } else {
                     $records++;
-                    $batch[] = array($session, $name, $rosId, $comment, 'pending', '');
+                    $serverName = isset($parsed['server_name']) ? (string)$parsed['server_name'] : '';
+                    $batch[] = array($session, $name, $rosId, $comment, $serverName, 'pending', '');
                 }
 
                 if (count($batch) >= $this->batch) {

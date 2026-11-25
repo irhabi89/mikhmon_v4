@@ -35,6 +35,18 @@ final class RecordParserTest extends TestCase
         $this->assertNull(RecordParser::parse('feb/30/2026-|-10:00-|-u-|-1-|-a-|-m-|-1d-|-p-|-c'));
     }
 
+    public function testParsesServerMarker(): void
+    {
+        $record = RecordParser::parse('2026-11-19-|-10:00:00-|-u-|-5000-|-a-|-m-|-1d-|-p-|-note|#MMSRV1#|hs-a');
+        $this->assertNotNull($record);
+        $this->assertSame('hs-a', $record['server_name']);
+        $this->assertSame('note', $record['sale_comment']);
+
+        $legacy = RecordParser::parse('nov/19/2026-|-10:00-|-u-|-1-|-a-|-m-|-1d-|-p-|-c');
+        $this->assertNotNull($legacy);
+        $this->assertSame('', $legacy['server_name']);
+    }
+
     public function testMonthBucketRoundTrip(): void
     {
         $this->assertSame('2026-11', RecordParser::monthKeyFromBucket('nov2026'));

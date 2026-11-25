@@ -556,6 +556,7 @@ elseif ($ppp == "edit-profile") {
 <script src="./js/highcharts/themes/hc.<?= $theme; ?>.js"></script>
 <?php endif; ?>
 <script src="./js/mikhmon-ui.<?= $theme; ?>.min.js"></script>
+<script src="./js/app.js?t=<?= file_exists("./js/app.js") ? filemtime("./js/app.js") : "1"; ?>"></script>
 <script src="./js/mikhmon.js?t=<?= file_exists("./js/mikhmon.js") ? filemtime("./js/mikhmon.js") : "1"; ?>"></script>
 
 <?php

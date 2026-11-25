@@ -18,5 +18,7 @@ final class Application extends BaseApplication
         $this->add(new SyncRunCommand());
         $this->add(new SyncWorkerCommand());
         $this->add(new SyncStatusCommand());
+        $this->add(new OnloginUpgradeCommand());
+        $this->add(new OnloginRollbackCommand());
     }
 }

@@ -20,9 +20,9 @@ final class RouterRecordRepository
 
     /**
      * Upsert a batch of scanned rows. Each row:
-     * [session, name, ros_script_id, script_comment, state, error]
+     * [session, name, ros_script_id, script_comment, server_name, state, error]
      *
-     * @param array<int,array{0:string,1:string,2:string,3:string,4:string,5:string}> $rows
+     * @param array<int,array{0:string,1:string,2:string,3:string,4:string,5:string,6:string}> $rows
      */
     public function upsertMany(array $rows, int $runId, ?string $now = null): int
     {
@@ -35,12 +35,13 @@ final class RouterRecordRepository
         $pdo = $this->db->pdo();
         $sql = <<<'SQL'
 INSERT INTO sales_router_records
-    (session, name, ros_script_id, script_comment, state, run_id,
+    (session, name, ros_script_id, script_comment, server_name, state, run_id,
      first_seen_at, last_seen_at, imported_at, dup_count, error)
-VALUES (?,?,?,?,?,?,?,?,'',1,?)
+VALUES (?,?,?,?,?,?,?,?,?,'',1,?)
 ON CONFLICT(session, name) DO UPDATE SET
     ros_script_id = CASE WHEN excluded.ros_script_id != '' THEN excluded.ros_script_id ELSE sales_router_records.ros_script_id END,
     script_comment = excluded.script_comment,
+    server_name = excluded.server_name,
     last_seen_at = excluded.last_seen_at,
     run_id = excluded.run_id,
     dup_count = CASE WHEN sales_router_records.run_id = excluded.run_id
@@ -62,10 +63,11 @@ SQL;
                     $row[2],
                     $row[3],
                     $row[4],
+                    $row[5],
                     $runId,
                     $now,
                     $now,
-                    $row[5],
+                    $row[6],
                 ));
                 $count++;
             }
