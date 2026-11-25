@@ -78,10 +78,11 @@ if (!isset($_SESSION["mikhmon"])) {
   } else {
     $logh = "350px";
     $lreport = "style='display:block;'";
-    // Pre-calculate income directly from SQLite DB (DB-first, instantaneous <0.04s)
-    include_once('./include/mikhmon_records.php');
-    include_once('./lib/sessions_store.php');
-    $stats_home = mikhmon_sales_stats($session);
+    // Pre-calculate income from the new SQLite schema (DB-first).
+    require_once(__DIR__ . '/../include/bootstrap.php');
+    mikhmon_require_schema();
+    $sales_home = new \Mikhmon\Storage\SalesRepository(mikhmon_database());
+    $stats_home = $sales_home->stats($session);
     $indo_currencies = (isset($cekindo['indo']) && is_array($cekindo['indo']))
       ? $cekindo['indo']
       : array('RP', 'Rp', 'rp', 'IDR', 'idr', 'RP.', 'Rp.', 'rp.', 'IDR.', 'idr.');

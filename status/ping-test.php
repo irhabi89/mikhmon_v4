@@ -43,6 +43,8 @@ if (!isset($_SESSION["mikhmon"])) {
     echo mikhmon_ping_card('Ping Test', '<b class="text-red">Sesi login berakhir.</b><br>Silakan login ulang lalu coba lagi.');
     exit;
 }
+// The ping test is read-only; release the session lock before network I/O.
+session_write_close();
 
 $session = isset($_REQUEST['session']) ? (string)$_REQUEST['session'] : '';
 $ping = isset($_REQUEST['ping']) ? $_REQUEST['ping'] : '';

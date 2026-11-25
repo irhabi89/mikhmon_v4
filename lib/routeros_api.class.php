@@ -21,13 +21,17 @@ class RouterosAPI
     var $connected = false; //  Connection state
     var $port      = 8728;  //  Port to connect to (default 8729 for ssl)
     var $ssl       = false; //  Connect using SSL (must enable api-ssl in IP/Services)
-    var $timeout   = 3;     //  Connection attempt timeout and data read timeout
-    var $attempts  = 5;     //  Connection attempt count
-    var $delay     = 3;     //  Delay between connection attempts in seconds
+    var $timeout   = 3;     //  Connection attempt timeout
+    var $read_timeout = 30; //  Default deadline for one complete API response
+    var $attempts  = 1;     //  Connection attempt count (fail fast by default)
+    var $delay     = 1;     //  Delay between connection attempts in seconds
 
     var $socket;            //  Variable for storing socket resource
     var $error_no;          //  Variable for storing connection error number, if any
     var $error_str;         //  Variable for storing connection error text, if any
+    var $last_error = '';   //  Last socket/protocol error (human readable)
+    var $last_ret   = null; //  Last "ret" value returned by the router
+    private $empty_reads = 0;
 
     /* Check, can be var used in foreach  */
     public function isIterable($var)
@@ -94,53 +98,105 @@ class RouterosAPI
      */
     public function connect($ip, $login, $password)
     {
+        $target = $this->parseTarget($ip);
+        $this->port = $target['port'];
+        $this->last_error = '';
+        $this->last_ret = null;
+
         for ($ATTEMPT = 1; $ATTEMPT <= $this->attempts; $ATTEMPT++) {
             $this->connected = false;
             $PROTOCOL = ($this->ssl ? 'ssl://' : '' );
             $context = stream_context_create(array('ssl' => array('ciphers' => 'ADH:ALL', 'verify_peer' => false, 'verify_peer_name' => false)));
-            $this->debug('Connection attempt #' . $ATTEMPT . ' to ' . $PROTOCOL . $ip . ':' . $this->port . '...');
-            $this->socket = @stream_socket_client($PROTOCOL . $ip.':'. $this->port, $this->error_no, $this->error_str, $this->timeout, STREAM_CLIENT_CONNECT,$context);
+            $this->debug('Connection attempt #' . $ATTEMPT . ' to ' . $PROTOCOL . $target['host'] . ':' . $this->port . '...');
+            $this->error_no = 0;
+            $this->error_str = '';
+            $this->socket = @stream_socket_client($PROTOCOL . $target['host'] . ':' . $this->port, $this->error_no, $this->error_str, $this->timeout, STREAM_CLIENT_CONNECT, $context);
             if ($this->socket) {
                 stream_set_timeout($this->socket, $this->timeout);
                 $this->write('/login', false);
                 $this->write('=name=' . $login, false);
                 $this->write('=password=' . $password);
-                $RESPONSE = $this->read(false);
-                if (isset($RESPONSE[0])) {
-                    if ($RESPONSE[0] == '!done') {
-                        if (!isset($RESPONSE[1])) {
-                            // Login method post-v6.43
-                            $this->connected = true;
-                            break;
-                        } else {
-                            // Login method pre-v6.43
-                            $MATCHES = array();
-                            if (preg_match_all('/[^=]+/i', $RESPONSE[1], $MATCHES)) {
-                                if ($MATCHES[0][0] == 'ret' && strlen($MATCHES[0][1]) == 32) {
-                                    $this->write('/login', false);
-                                    $this->write('=name=' . $login, false);
-                                    $this->write('=response=00' . md5(chr(0) . $password . pack('H*', $MATCHES[0][1])));
-                                    $RESPONSE = $this->read(false);
-                                    if (isset($RESPONSE[0]) && $RESPONSE[0] == '!done') {
-                                        $this->connected = true;
-                                        break;
-                                    }
+                $RESPONSE = $this->readRawWords();
+                if (isset($RESPONSE[0]) && $RESPONSE[0] == '!done') {
+                    if (!isset($RESPONSE[1])) {
+                        // Login method post-v6.43
+                        $this->connected = true;
+                    } else {
+                        // Login method pre-v6.43
+                        $MATCHES = array();
+                        if (preg_match_all('/[^=]+/i', $RESPONSE[1], $MATCHES)) {
+                            if ($MATCHES[0][0] == 'ret' && isset($MATCHES[0][1]) && strlen($MATCHES[0][1]) == 32) {
+                                $this->write('/login', false);
+                                $this->write('=name=' . $login, false);
+                                $this->write('=response=00' . md5(chr(0) . $password . pack('H*', $MATCHES[0][1])));
+                                $RESPONSE = $this->readRawWords();
+                                if (isset($RESPONSE[0]) && $RESPONSE[0] == '!done') {
+                                    $this->connected = true;
                                 }
                             }
                         }
                     }
                 }
-                fclose($this->socket);
+                if ($this->connected) {
+                    stream_set_timeout($this->socket, $this->read_timeout);
+                    break;
+                }
+                $this->last_error = isset($RESPONSE[1]) ? 'login failed' : 'login failed';
+                @fclose($this->socket);
+                $this->socket = null;
+            } else {
+                $this->last_error = $this->error_str !== '' ? $this->error_str : 'connection failed';
             }
-            sleep($this->delay);
+            if ($ATTEMPT < $this->attempts) {
+                sleep($this->delay);
+            }
         }
 
         if ($this->connected) {
             $this->debug('Connected...');
         } else {
-            $this->debug('Error...');
+            if ($this->last_error === '') {
+                $this->last_error = 'connection failed';
+            }
+            $this->debug('Error: ' . $this->last_error);
         }
         return $this->connected;
+    }
+
+    /**
+     * Accept "host", "host:port", "[ipv6]" and "[ipv6]:port".
+     * Strips a scheme/path in case a URL was pasted into the IP field.
+     *
+     * @param string $input
+     * @return array{host:string,port:int}
+     */
+    public function parseTarget($input)
+    {
+        $input = trim((string)$input);
+        $input = preg_replace('/\s+/', '', $input);
+        $input = preg_replace('#^[a-z][a-z0-9+.-]*://#i', '', $input);
+        $input = preg_replace('#/.*$#', '', $input);
+
+        $host = $input;
+        $port = (int)$this->port;
+        if ($port < 1 || $port > 65535) {
+            $port = 8728;
+        }
+
+        if (preg_match('/^\[([^\]]+)\](?::([0-9]+))?$/', $input, $m)) {
+            $host = $m[1];
+            if (isset($m[2]) && $m[2] !== '') {
+                $port = (int)$m[2];
+            }
+        } elseif (substr_count($input, ':') === 1) {
+            list($h, $p) = explode(':', $input, 2);
+            if ($h !== '' && $p !== '' && ctype_digit($p)) {
+                $host = $h;
+                $port = (int)$p;
+            }
+        }
+
+        return array('host' => $host, 'port' => $port);
     }
 
 
@@ -272,85 +328,336 @@ class RouterosAPI
 
 
     /**
-     * Read data from Router OS
+     * Read one length-prefixed word. Returns null on EOF/timeout.
      *
-     * @param boolean     $parse      Parse the data? default: true
-     *
-     * @return array                  Array with parsed or unparsed data
+     * @param string $firstByte
+     * @param float  $deadline
+     * @return int|null
      */
-    public function read($parse = true)
+    private function readLength($firstByte, $deadline)
     {
-        $RESPONSE     = array();
-        $receiveddone = false;
+        $b = ord($firstByte);
+        if (($b & 0x80) === 0) {
+            return $b;
+        }
+        if (($b & 0xC0) === 0x80) {
+            $extra = $this->readBytes(1, $deadline);
+            return ($extra === null) ? null : (($b & 0x3F) << 8) + ord($extra);
+        }
+        if (($b & 0xE0) === 0xC0) {
+            $extra = $this->readBytes(2, $deadline);
+            if ($extra === null) {
+                return null;
+            }
+            return (($b & 0x1F) << 16) + (ord($extra[0]) << 8) + ord($extra[1]);
+        }
+        if (($b & 0xF0) === 0xE0) {
+            $extra = $this->readBytes(3, $deadline);
+            if ($extra === null) {
+                return null;
+            }
+            return (($b & 0x0F) << 24) + (ord($extra[0]) << 16) + (ord($extra[1]) << 8) + ord($extra[2]);
+        }
+        // RouterOS reserves 0xF0 + four bytes for lengths above 0xFFFFFFF.
+        $extra = $this->readBytes(4, $deadline);
+        if ($extra === null) {
+            return null;
+        }
+        return (ord($extra[0]) << 24) + (ord($extra[1]) << 16) + (ord($extra[2]) << 8) + ord($extra[3]);
+    }
+
+    /**
+     * Read exactly $len bytes with an EOF/timeout guard.
+     *
+     * @param int   $len
+     * @param float $deadline
+     * @return string|null
+     */
+    private function readBytes($len, $deadline)
+    {
+        $len = (int)$len;
+        if ($len <= 0) {
+            return '';
+        }
+        $data = '';
+        while (strlen($data) < $len) {
+            if (microtime(true) > $deadline) {
+                $this->last_error = 'read timeout';
+                return null;
+            }
+            $chunk = @fread($this->socket, $len - strlen($data));
+            if ($chunk === false || $chunk === '') {
+                if (!is_resource($this->socket) || feof($this->socket)) {
+                    $this->last_error = 'connection closed';
+                    return null;
+                }
+                $meta = stream_get_meta_data($this->socket);
+                if (!empty($meta['timed_out'])) {
+                    $this->last_error = 'read timeout';
+                    return null;
+                }
+                $this->empty_reads++;
+                if ($this->empty_reads > 500) {
+                    $this->last_error = 'no data from router';
+                    return null;
+                }
+                usleep(1000);
+                continue;
+            }
+            $this->empty_reads = 0;
+            $data .= $chunk;
+        }
+        return $data;
+    }
+
+    /**
+     * Read a complete API sentence (words terminated by a zero-length word).
+     * Returns null on EOF/timeout.
+     *
+     * @param float $deadline
+     * @return array|null
+     */
+    private function readSentence($deadline)
+    {
+        $words = array();
         while (true) {
-            // Read the first byte of input which gives us some or all of the length
-            // of the remaining reply.
-            $BYTE   = ord(fread($this->socket, 1));
-            $LENGTH = 0;
-            // If the first bit is set then we need to remove the first four bits, shift left 8
-            // and then read another byte in.
-            // We repeat this for the second and third bits.
-            // If the fourth bit is set, we need to remove anything left in the first byte
-            // and then read in yet another byte.
-            if ($BYTE & 128) {
-                if (($BYTE & 192) == 128) {
-                    $LENGTH = (($BYTE & 63) << 8) + ord(fread($this->socket, 1));
-                } else {
-                    if (($BYTE & 224) == 192) {
-                        $LENGTH = (($BYTE & 31) << 8) + ord(fread($this->socket, 1));
-                        $LENGTH = ($LENGTH << 8) + ord(fread($this->socket, 1));
-                    } else {
-                        if (($BYTE & 240) == 224) {
-                            $LENGTH = (($BYTE & 15) << 8) + ord(fread($this->socket, 1));
-                            $LENGTH = ($LENGTH << 8) + ord(fread($this->socket, 1));
-                            $LENGTH = ($LENGTH << 8) + ord(fread($this->socket, 1));
-                        } else {
-                            $LENGTH = ord(fread($this->socket, 1));
-                            $LENGTH = ($LENGTH << 8) + ord(fread($this->socket, 1));
-                            $LENGTH = ($LENGTH << 8) + ord(fread($this->socket, 1));
-                            $LENGTH = ($LENGTH << 8) + ord(fread($this->socket, 1));
-                        }
-                    }
+            if (microtime(true) > $deadline) {
+                $this->last_error = 'read timeout';
+                return null;
+            }
+            $byte = @fread($this->socket, 1);
+            if ($byte === false || $byte === '') {
+                if (!is_resource($this->socket) || feof($this->socket)) {
+                    $this->last_error = 'connection closed';
+                    return null;
                 }
+                $meta = stream_get_meta_data($this->socket);
+                if (!empty($meta['timed_out'])) {
+                    $this->last_error = 'read timeout';
+                    return null;
+                }
+                $this->empty_reads++;
+                if ($this->empty_reads > 500) {
+                    $this->last_error = 'no data from router';
+                    return null;
+                }
+                usleep(1000);
+                continue;
+            }
+            $this->empty_reads = 0;
+            $length = $this->readLength($byte, $deadline);
+            if ($length === null) {
+                return null;
+            }
+            if ($length === 0) {
+                return $words;
+            }
+            $word = $this->readBytes($length, $deadline);
+            if ($word === null) {
+                return null;
+            }
+            $words[] = $word;
+            $this->debug('>>> [' . $length . '] ' . $word);
+        }
+    }
+
+    /**
+     * Parse word list into an associative row. Leading "=" is stripped.
+     *
+     * @param array $words
+     * @return array
+     */
+    private function parseWords($words)
+    {
+        $row = array();
+        $count = count($words);
+        for ($i = 1; $i < $count; $i++) {
+            $w = (string)$words[$i];
+            if ($w === '') {
+                continue;
+            }
+            if ($w[0] === '=') {
+                $w = substr($w, 1);
+            }
+            $pos = strpos($w, '=');
+            if ($pos === false) {
+                $row[$w] = '';
             } else {
-                $LENGTH = $BYTE;
+                $row[substr($w, 0, $pos)] = substr($w, $pos + 1);
             }
+        }
+        return $row;
+    }
 
-            $_ = "";
-
-            // If we have got more characters to read, read them in.
-            if ($LENGTH > 0) {
-                $_      = "";
-                $retlen = 0;
-                while ($retlen < $LENGTH) {
-                    $toread = $LENGTH - $retlen;
-                    $_ .= fread($this->socket, $toread);
-                    $retlen = strlen($_);
-                }
-                $RESPONSE[] = $_;
-                $this->debug('>>> [' . $retlen . '/' . $LENGTH . '] bytes read.');
+    /**
+     * Read all sentences until a terminal reply; returns flat raw words.
+     * Used by the login handshake (compatible with pre/post 6.43).
+     *
+     * @param float|null $timeout
+     * @return array
+     */
+    public function readRawWords($timeout = null)
+    {
+        if (!is_resource($this->socket)) {
+            $this->last_error = 'not connected';
+            return array();
+        }
+        $deadline = microtime(true) + (($timeout === null) ? $this->read_timeout : (float)$timeout);
+        $all = array();
+        while (true) {
+            $words = $this->readSentence($deadline);
+            if ($words === null) {
+                break;
             }
-
-            // If we get a !done, make a note of it.
-            if ($_ == "!done") {
-                $receiveddone = true;
+            if (empty($words)) {
+                continue;
             }
-
-            $STATUS = stream_get_meta_data($this->socket);
-            if ($LENGTH > 0) {
-                $this->debug('>>> [' . $LENGTH . ', ' . $STATUS['unread_bytes'] . ']' . $_);
+            foreach ($words as $w) {
+                $all[] = $w;
             }
-
-            if ((!$this->connected && !$STATUS['unread_bytes']) || ($this->connected && !$STATUS['unread_bytes'] && $receiveddone)) {
+            if (in_array($words[0], array('!done', '!fatal'), true)) {
                 break;
             }
         }
+        return $all;
+    }
 
-        if ($parse) {
-            $RESPONSE = $this->parseResponse($RESPONSE);
+    /**
+     * Read one complete response without collecting rows when a callback is used.
+     *
+     * @param callable|null $onRow
+     * @param float         $deadline
+     * @param bool          $collect
+     * @return array
+     */
+    private function readResponse($onRow, $deadline, $collect)
+    {
+        $rows = array();
+        $trap = array();
+        $fatal = array();
+        $ret = null;
+        $count = 0;
+        $ok = true;
+        $error = '';
+
+        while (true) {
+            $words = $this->readSentence($deadline);
+            if ($words === null) {
+                $ok = false;
+                $error = $this->last_error !== '' ? $this->last_error : 'read failed';
+                break;
+            }
+            if (empty($words)) {
+                continue;
+            }
+            $type = $words[0];
+            if ($type === '!re') {
+                $row = $this->parseWords($words);
+                $count++;
+                if ($collect) {
+                    $rows[] = $row;
+                }
+                if ($onRow !== null) {
+                    $stop = call_user_func($onRow, $row);
+                    if ($stop === false) {
+                        $ok = false;
+                        $error = 'cancelled';
+                        break;
+                    }
+                }
+            } elseif ($type === '!trap') {
+                $trap[] = $this->parseWords($words);
+            } elseif ($type === '!fatal') {
+                $fatal = $this->parseWords($words);
+                $ok = false;
+                $error = 'fatal: ' . (isset($fatal['message']) ? $fatal['message'] : 'router closed the API connection');
+                break;
+            } elseif ($type === '!done') {
+                $attrs = $this->parseWords($words);
+                if (array_key_exists('ret', $attrs)) {
+                    $ret = $attrs['ret'];
+                }
+                break;
+            } elseif ($type === '!empty') {
+                // RouterOS 7.18+: an empty result set is followed by !done.
+                // Do not break here or the next command reads that !done and
+                // the connection goes out of sync.
+                continue;
+            } else {
+                // Unknown reply type: ignore instead of hanging.
+                $this->debug('Unknown API reply: ' . $type);
+            }
         }
 
-        return $RESPONSE;
+        if (!empty($trap)) {
+            $ok = false;
+            if ($error === '') {
+                $error = 'trap';
+            }
+        }
+        $this->last_error = $error;
+        $this->last_ret = $ret;
+
+        return array(
+            'ok' => $ok,
+            'rows' => $rows,
+            'count' => $count,
+            'ret' => $ret,
+            'trap' => $trap,
+            'fatal' => $fatal,
+            'error' => $error,
+        );
+    }
+
+    /**
+     * Read data from Router OS.
+     *
+     * @param boolean $parse Parse rows (true) or return flat raw words (false).
+     * @return array|string
+     */
+    public function read($parse = true)
+    {
+        if (!is_resource($this->socket)) {
+            $this->last_error = 'not connected';
+            return $parse ? array('!error' => 'not connected') : array();
+        }
+        if ($parse === false) {
+            return $this->readRawWords();
+        }
+        $res = $this->readResponse(null, microtime(true) + $this->read_timeout, true);
+
+        if (!empty($res['fatal'])) {
+            return array('!fatal' => $res['fatal']);
+        }
+        if (!empty($res['trap'])) {
+            $out = $res['rows'];
+            $out['!trap'] = $res['trap'];
+            return $out;
+        }
+        if (!$res['ok'] && empty($res['rows'])) {
+            return array('!error' => $res['error']);
+        }
+        if ($res['ret'] !== null && empty($res['rows'])) {
+            return $res['ret'];
+        }
+        return $res['rows'];
+    }
+
+    /**
+     * Stream rows to a callback without keeping them in memory.
+     *
+     * @param callable   $onRow
+     * @param float|null $timeout
+     * @return array
+     */
+    public function readStream($onRow, $timeout = null)
+    {
+        if (!is_resource($this->socket)) {
+            $this->last_error = 'not connected';
+            return array('ok' => false, 'rows' => array(), 'count' => 0, 'ret' => null, 'trap' => array(), 'fatal' => array(), 'error' => 'not connected');
+        }
+        $deadline = microtime(true) + (($timeout === null) ? $this->read_timeout : (float)$timeout);
+        return $this->readResponse($onRow, $deadline, false);
     }
 
 
@@ -368,18 +675,22 @@ class RouterosAPI
     public function write($command, $param2 = true)
     {
         if ($command) {
+            if (!is_resource($this->socket)) {
+                $this->last_error = 'not connected';
+                return false;
+            }
             $data = explode("\n", $command);
             foreach ($data as $com) {
                 $com = trim($com);
-                fwrite($this->socket, $this->encodeLength(strlen($com)) . $com);
+                @fwrite($this->socket, $this->encodeLength(strlen($com)) . $com);
                 $this->debug('<<< [' . strlen($com) . '] ' . $com);
             }
 
             if (gettype($param2) == 'integer') {
-                fwrite($this->socket, $this->encodeLength(strlen('.tag=' . $param2)) . '.tag=' . $param2 . chr(0));
+                @fwrite($this->socket, $this->encodeLength(strlen('.tag=' . $param2)) . '.tag=' . $param2 . chr(0));
                 $this->debug('<<< [' . strlen('.tag=' . $param2) . '] .tag=' . $param2);
             } elseif (gettype($param2) == 'boolean') {
-                fwrite($this->socket, ($param2 ? chr(0) : ''));
+                @fwrite($this->socket, ($param2 ? chr(0) : ''));
             }
 
             return true;
@@ -388,16 +699,14 @@ class RouterosAPI
         }
     }
 
-
     /**
-     * Write (send) data to Router OS
+     * Send a command and its attributes. Shared by comm()/commStream().
      *
-     * @param string      $com        A string with the command to send
-     * @param array       $arr        An array with arguments or queries
-     *
-     * @return array                  Array with parsed
+     * @param string $com
+     * @param array  $arr
+     * @return void
      */
-    public function comm($com, $arr = array())
+    private function sendCommand($com, $arr)
     {
         $count = count($arr);
         $this->write($com, !$arr);
@@ -420,8 +729,57 @@ class RouterosAPI
                 $this->write($el, $last);
             }
         }
+    }
 
+
+    /**
+     * Write (send) data to Router OS
+     *
+     * @param string      $com        A string with the command to send
+     * @param array       $arr        An array with arguments or queries
+     *
+     * @return array                  Array with parsed
+     */
+    public function comm($com, $arr = array())
+    {
+        $this->sendCommand($com, $arr);
         return $this->read();
+    }
+
+    /**
+     * Send a command and stream each !re row to a callback.
+     * Memory stays bounded even for 100k+ rows.
+     *
+     * @param string        $com
+     * @param array         $arr
+     * @param callable      $onRow
+     * @param float|null    $timeout
+     * @return array{ok:bool,count:int,ret:mixed,trap:array,fatal:array,error:string}
+     */
+    public function commStream($com, $arr, $onRow, $timeout = null)
+    {
+        $this->sendCommand($com, $arr);
+        return $this->readStream($onRow, $timeout);
+    }
+
+    /**
+     * Run a count-only print query and return the integer count (-1 on error).
+     *
+     * @param string $com
+     * @param array  $arr
+     * @return int
+     */
+    public function countOnly($com, $arr = array())
+    {
+        $arr['count-only'] = '';
+        $res = $this->comm($com, $arr);
+        if (is_array($res)) {
+            if (isset($res['!trap']) || isset($res['!fatal']) || isset($res['!error'])) {
+                return -1;
+            }
+            return count($res);
+        }
+        return is_numeric($res) ? (int)$res : -1;
     }
 
     /**

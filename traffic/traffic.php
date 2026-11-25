@@ -29,6 +29,9 @@ $interface = $_GET['iface'];
 include('../include/config.php');
 include('../include/readcfg.php');
 
+// Do not serialise parallel AJAX requests on the session lock.
+session_write_close();
+
 // routeros api
 include_once('../lib/routeros_api.class.php');
 include_once('../lib/formatbytesbites.php');

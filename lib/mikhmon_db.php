@@ -40,6 +40,9 @@ function mikhmon_db_init()
         return false;
     }
     try {
+        // New sales tables are owned by src/Storage/Migrator.php. The legacy
+        // init must not recreate the old sales_records/sales_import_queue after
+        // the v2 migration has parked them.
         $db->exec(<<<'SQL'
 CREATE TABLE IF NOT EXISTS mikhmon_config (
   id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -49,6 +52,7 @@ CREATE TABLE IF NOT EXISTS mikhmon_config (
 CREATE TABLE IF NOT EXISTS mikhmon_sessions (
   name TEXT PRIMARY KEY,
   ip_host TEXT NOT NULL DEFAULT '',
+  port_host INTEGER NOT NULL DEFAULT 8728,
   user_host TEXT NOT NULL DEFAULT '',
   pass_host TEXT NOT NULL DEFAULT '',
   hotspot_name TEXT NOT NULL DEFAULT '',
@@ -61,38 +65,6 @@ CREATE TABLE IF NOT EXISTS mikhmon_sessions (
   live_report TEXT NOT NULL DEFAULT '',
   raw TEXT
 );
-CREATE TABLE IF NOT EXISTS sales_records (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  session TEXT NOT NULL DEFAULT '',
-  ros_script_id TEXT NOT NULL DEFAULT '',
-  name TEXT NOT NULL DEFAULT '',
-  source TEXT NOT NULL DEFAULT '',
-  owner TEXT NOT NULL DEFAULT '',
-  comment TEXT NOT NULL DEFAULT '',
-  c_date TEXT NOT NULL DEFAULT '',
-  c_time TEXT NOT NULL DEFAULT '',
-  c_username TEXT NOT NULL DEFAULT '',
-  c_price TEXT NOT NULL DEFAULT '',
-  c_address TEXT NOT NULL DEFAULT '',
-  c_mac TEXT NOT NULL DEFAULT '',
-  c_validity TEXT NOT NULL DEFAULT '',
-  c_profile TEXT NOT NULL DEFAULT '',
-  c_comment TEXT NOT NULL DEFAULT '',
-  imported_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S', 'now'))
-);
-CREATE UNIQUE INDEX IF NOT EXISTS sales_records_script
-  ON sales_records(session, ros_script_id) WHERE ros_script_id != '';
-CREATE UNIQUE INDEX IF NOT EXISTS sales_records_session_name ON sales_records(session, name);
-CREATE INDEX IF NOT EXISTS sales_records_session_source ON sales_records(session, source);
-CREATE INDEX IF NOT EXISTS sales_records_session_owner ON sales_records(session, owner);
-CREATE INDEX IF NOT EXISTS sales_records_session_date ON sales_records(session, c_date);
-CREATE TABLE IF NOT EXISTS sales_import_queue (
-  session TEXT NOT NULL DEFAULT '',
-  name TEXT NOT NULL DEFAULT '',
-  done INTEGER NOT NULL DEFAULT 0,
-  PRIMARY KEY (session, name)
-);
-CREATE INDEX IF NOT EXISTS sales_import_queue_done ON sales_import_queue(session, done);
 SQL);
         return true;
     } catch (PDOException $e) {

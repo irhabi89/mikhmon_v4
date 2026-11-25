@@ -1,4 +1,5 @@
 <?php
+if (PHP_SAPI !== 'cli') { http_response_code(403); exit('CLI only'); }
 /*
  * Mikhmon v3 Phase 2: import config ($data from include/config.php) into SQLite.
  *

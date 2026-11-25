@@ -39,6 +39,7 @@ function mikhmon_row_from_data($name, $dataRow)
     return array(
         'name' => (string)$name,
         'ip_host' => $val(1, '!'),
+        'port_host' => 8728,
         'user_host' => $val(2, '@|@'),
         'pass_host' => $val(3, '#|#'),
         'hotspot_name' => $val(4, '%'),
@@ -93,7 +94,7 @@ function mikhmon_session_upsert($fields)
     if ($db === false) {
         return false;
     }
-    $allowed = array('name', 'ip_host', 'user_host', 'pass_host', 'hotspot_name',
+    $allowed = array('name', 'ip_host', 'port_host', 'user_host', 'pass_host', 'hotspot_name',
         'dns_name', 'currency', 'areload', 'iface', 'infolp', 'idleto',
         'live_report', 'raw');
     $fields = array_intersect_key($fields, array_flip($allowed));

@@ -72,7 +72,10 @@ if (!isset($_SESSION["mikhmon"])) {
 
   if (isset($_POST['save'])) {
 
-    $siphost = (preg_replace('/\s+/', '', $_POST['ipmik']));
+    $sip_raw = (preg_replace('/\s+/', '', $_POST['ipmik']));
+    $sip_target = \Mikhmon\Router\RouterTarget::fromString($sip_raw);
+    $siphost = $sip_target->host();
+    $sport_host = $sip_target->port();
     $suserhost = ($_POST['usermik']);
     $spasswdhost = encrypt($_POST['passmik']);
     $shotspotname = str_replace("'","",$_POST['hotspotname']);
@@ -105,6 +108,7 @@ if (!isset($_SESSION["mikhmon"])) {
     mikhmon_session_upsert(array(
       'name' => (string)$sesname,
       'ip_host' => $siphost,
+      'port_host' => $sport_host,
       'user_host' => $suserhost,
       'pass_host' => $spasswdhost,
       'hotspot_name' => $shotspotname,

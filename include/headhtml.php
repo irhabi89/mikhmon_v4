@@ -34,6 +34,7 @@ error_reporting(0);
 		<link rel="stylesheet" type="text/css" href="css/font-awesome/css/font-awesome.min.css" />
 		<!-- Mikhmon UI -->
 		<link rel="stylesheet" href="css/mikhmon-ui.<?= isset($theme) ? $theme : 'dark'; ?>.min.css">
+		<link rel="stylesheet" href="css/mikhmon-ui.shared.css?v=<?= is_file(__DIR__ . '/../css/mikhmon-ui.shared.css') ? filemtime(__DIR__ . '/../css/mikhmon-ui.shared.css') : '1'; ?>">
 		<!-- favicon -->
 		<link rel="icon" href="./img/favicon.png" />
 		<!-- jQuery -->
@@ -44,7 +45,7 @@ error_reporting(0);
 
 		
 	</head>
-	<body>
+	<body class="mm-theme-<?= isset($theme) ? htmlspecialchars((string)$theme, ENT_QUOTES, 'UTF-8') : 'dark'; ?>">
 		<div class="wrapper">
 
 			

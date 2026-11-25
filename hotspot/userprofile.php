@@ -38,6 +38,16 @@ if (!isset($_SESSION["mikhmon"])) {
 	$countprofile = $API->comm("/ip/hotspot/user/profile/print", array(
 		"count-only" => "",
 	));
+
+	$allprofiles = $getprofile;
+	$totalProfiles = count($allprofiles);
+	$page = \Mikhmon\Support\Pagination::page(isset($_GET['page']) ? $_GET['page'] : 1);
+	$perPage = \Mikhmon\Support\Pagination::perPage(isset($_GET['per_page']) ? $_GET['per_page'] : 50);
+	$pages = \Mikhmon\Support\Pagination::pages($totalProfiles, $perPage);
+	if ($page > $pages) { $page = $pages; }
+	$getprofile = array_slice($allprofiles, ($page - 1) * $perPage, $perPage);
+	$TotalReg = count($getprofile);
+	$baseUrl = $_SERVER['REQUEST_URI'];
 }
 ?>
 <div class="row">
@@ -166,6 +176,7 @@ for ($i = 0; $i < $TotalReg; $i++) {
 ?>
   </tbody>
 </table>
+<div class="mm-pagination-wrap"><?= mikhmon_pager($totalProfiles, $page, $perPage, $baseUrl); ?><span class="mm-per-page"><?= mikhmon_per_page($perPage, $baseUrl); ?></span></div>
 </div>
 </div>
 </div>

@@ -28,6 +28,16 @@ if (!isset($_SESSION["mikhmon"])) {
 	$countbinding = $API->comm("/ip/hotspot/ip-binding/print", array(
 		"count-only" => "",
 	));
+
+	$allbindings = $getbinding;
+	$totalBindings = count($allbindings);
+	$page = \Mikhmon\Support\Pagination::page(isset($_GET['page']) ? $_GET['page'] : 1);
+	$perPage = \Mikhmon\Support\Pagination::perPage(isset($_GET['per_page']) ? $_GET['per_page'] : 50);
+	$pages = \Mikhmon\Support\Pagination::pages($totalBindings, $perPage);
+	if ($page > $pages) { $page = $pages; }
+	$getbinding = array_slice($allbindings, ($page - 1) * $perPage, $perPage);
+	$TotalReg = count($getbinding);
+	$baseUrl = $_SERVER['REQUEST_URI'];
 }
 
 ?>
@@ -104,6 +114,7 @@ for ($i = 0; $i < $TotalReg; $i++) {
 	?>
   </tbody>
 </table>
+<div class="mm-pagination-wrap"><?= mikhmon_pager($totalBindings, $page, $perPage, $baseUrl); ?><span class="mm-per-page"><?= mikhmon_per_page($perPage, $baseUrl); ?></span></div>
 </div>
 </div>
 </div>

@@ -1,0 +1,39 @@
+{
+  "name": "mikhmon/mikhmon",
+  "description": "Mikhmon hotspot manager with SQLite sales reporting",
+  "type": "project",
+  "license": "GPL-2.0-or-later",
+  "require": {
+    "php": "^7.4 || ^8.0",
+    "ext-pdo": "*",
+    "ext-pdo_sqlite": "*",
+    "ext-json": "*",
+    "monolog/monolog": "^2.9",
+    "vlucas/phpdotenv": "^5.6",
+    "symfony/console": "^5.4",
+    "symfony/process": "^5.4"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^9.6"
+  },
+  "autoload": {
+    "psr-4": {
+      "Mikhmon\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Mikhmon\\Tests\\": "tests/"
+    }
+  },
+  "config": {
+    "sort-packages": true,
+    "platform": {
+      "php": "7.4.33"
+    }
+  },
+  "scripts": {
+    "test": "phpunit",
+    "lint": "find src tests bin -name '*.php' -print0 | xargs -0 -n1 php -l"
+  }
+}

@@ -20,10 +20,12 @@
 error_reporting(0);
 ob_start("ob_gzhandler");
 
-$session = $_GET['session'];
+$session = isset($_GET['session']) ? (string)$_GET['session'] : '';
 include_once('../lib/routeros_api.class.php');
+include_once('../lib/router.php');
 include('../lib/formatbytesbites.php');
 include('../include/config.php');
+include_once('../include/readcfg.php');
 
 // theme  
 include('../include/theme.php');
@@ -33,17 +35,9 @@ if (!empty($_SESSION['timezone'])) {
 	date_default_timezone_set(mikhmon_valid_timezone($_SESSION['timezone']));
 }
 
-$iphost = isset($data[$session][1]) ? explode('!', $data[$session][1])[1] : '';
-$userhost = isset($data[$session][2]) ? explode('@|@', $data[$session][2])[1] : '';
-$passwdhost = isset($data[$session][3]) ? explode('#|#', $data[$session][3])[1] : '';
-$hotspotname = isset($data[$session][4]) ? explode('%', $data[$session][4])[1] : '';
-$dnsname = isset($data[$session][5]) ? explode('^', $data[$session][5])[1] : '';
-$currency = isset($data[$session][6]) ? explode('&', $data[$session][6])[1] : '';
-
 $cekindo['indo'] = array('RP', 'Rp', 'rp', 'IDR', 'idr', 'RP.', 'Rp.', 'rp.', 'IDR.', 'idr.', );
 
-$API = new RouterosAPI();
-$API->debug = false;
+$API = mikhmon_router_connect($session, array('attempts' => 1, 'timeout' => 3, 'read_timeout' => 8));
 if ($currency == in_array($currency, $cekindo['indo'])) {
 	$title = array("Status Voucher", "User/Kode Voucher", "Paket", "Lama Terhubung", "Pemakaian Data", "Sisa Data", "Masa Aktif", "Dari", "Sampai", "tidak terdaftar.", "sudah kadaluarsa.", "Tanggal", "Cek Status", " Hari", " Jam", "Aktif", "Expired");
 } else {
@@ -66,6 +60,7 @@ if ($currency == in_array($currency, $cekindo['indo'])) {
 <link rel="stylesheet" type="text/css" href="../css/font-awesome/css/font-awesome.min.css" />
 <!-- Mikhmon UI -->
 <link rel="stylesheet" href="../css/mikhmon-ui.<?= $theme; ?>.min.css">
+<link rel="stylesheet" href="../css/mikhmon-ui.shared.css?v=<?= is_file(__DIR__ . '/../css/mikhmon-ui.shared.css') ? filemtime(__DIR__ . '/../css/mikhmon-ui.shared.css') : '1'; ?>">
 <link rel="icon" href="../img/favicon.png" />
 <script>
 function goBack() {
@@ -74,7 +69,7 @@ function goBack() {
 </script>
 
 </head>
-<body >
+<body class="mm-theme-<?= htmlspecialchars((string)$theme, ENT_QUOTES, "UTF-8"); ?>">
 <div class="login-box" style="padding-top: 10px;">
 <h3 class="text-center">Status Voucher<br><?= $hotspotname; ?></h3>
 <p class="text-center" id="date1"><?= $title[11] . " : " . date("d-m-Y") . "<br>"; ?></p>
@@ -91,7 +86,7 @@ function goBack() {
 <?php
 if (isset($_POST['nama'])) {
 	$name = ($_POST['nama']);
-	if ($API->connect($iphost, $userhost, decrypt($passwdhost))) {
+	if ($API instanceof RouterosAPI && $API->connected) {
 		$getuser = $API->comm("/ip/hotspot/user/print", array("?name" => "$name"));
 		$user = $getuser[0]['name'];
 		$profile = $getuser[0]['profile'];
@@ -190,7 +185,9 @@ if (isset($_POST['nama'])) {
 		echo "</div>";
 	}
 }
-$API->disconnect();
+if ($API instanceof RouterosAPI) {
+	$API->disconnect();
+}
 
 }
 

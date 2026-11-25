@@ -57,6 +57,10 @@ $session = isset($session) ? $session : '';
 $store_session = mikhmon_session_get((string)$session);
 if (is_array($store_session)) {
     $iphost = isset($store_session['ip_host']) ? $store_session['ip_host'] : '';
+    $porthost = isset($store_session['port_host']) ? (int)$store_session['port_host'] : 8728;
+    if ($porthost > 0 && strpos((string)$iphost, ':') === false) {
+        $iphost .= ':' . $porthost;
+    }
     $userhost = isset($store_session['user_host']) ? $store_session['user_host'] : '';
     $passwdhost = isset($store_session['pass_host']) ? $store_session['pass_host'] : '';
     $hotspotname = isset($store_session['hotspot_name']) ? $store_session['hotspot_name'] : '';
@@ -74,6 +78,10 @@ if (is_array($store_session)) {
     // Legacy fallback while include/config.php still exists.
     $row = mikhmon_row_from_data((string)$session, $data[$session]);
     $iphost = $row['ip_host'];
+    $porthost = isset($row['port_host']) ? (int)$row['port_host'] : 8728;
+    if ($porthost > 0 && strpos((string)$iphost, ':') === false) {
+        $iphost .= ':' . $porthost;
+    }
     $userhost = $row['user_host'];
     $passwdhost = $row['pass_host'];
     $hotspotname = $row['hotspot_name'];
@@ -86,6 +94,7 @@ if (is_array($store_session)) {
     $livereport = $row['live_report'];
 } else {
     $iphost = $userhost = $passwdhost = $hotspotname = $dnsname = $currency = '';
+    $porthost = 8728;
     $areload = '10';
     $iface = $infolp = $idleto = $livereport = '';
 }

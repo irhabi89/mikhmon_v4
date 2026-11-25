@@ -4,3 +4,14 @@ data/mikhmon.db
 data/mikhmon.db-shm
 data/mikhmon.db-wal
 data/config.php.bak
+
+# Composer / tooling
+/vendor/
+/.env
+/data/logs/
+/data/locks/
+/data/backups/
+/tests/tmp/
+/data/*.bak-*
+/data/*.db.backup
+/data/*.backup

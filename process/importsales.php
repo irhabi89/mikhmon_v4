@@ -1,41 +1,41 @@
 <?php
 /*
- * Mikhmon v3: AJAX endpoint for the report page Import modal.
- * Actions: status, prepare, chunk, delete.
+ * Backwards-compatible shim for the old import modal.
+ * New UI uses process/sales_sync.php with run ids and CSRF tokens.
  */
-if (session_status() === PHP_SESSION_NONE) session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 error_reporting(0);
 header('Content-Type: application/json');
 if (!isset($_SESSION['mikhmon'])) {
     echo json_encode(array('ok' => false, 'error' => 'belum login'));
     exit;
 }
-require_once __DIR__ . '/../lib/sales_import.php';
-
-$session = isset($_POST['session']) ? (string)$_POST['session'] : '';
-if ($session === '') {
-    echo json_encode(array('ok' => false, 'error' => 'session required'));
+try {
+    require_once __DIR__ . '/../include/bootstrap.php';
+    mikhmon_require_schema();
+} catch (Throwable $e) {
+    echo json_encode(array('ok' => false, 'error' => $e->getMessage()));
     exit;
 }
+session_write_close();
 set_time_limit(0);
-@ini_set('memory_limit', '512M');
 
+$session = isset($_POST['session']) ? (string)$_POST['session'] : '';
 $action = isset($_POST['action']) ? (string)$_POST['action'] : '';
-switch ($action) {
-    case 'status':
-        echo json_encode(mikhmon_import_status($session));
-        break;
-    case 'prepare':
-        echo json_encode(mikhmon_import_prepare($session));
-        break;
-    case 'chunk':
-        $batch = isset($_POST['batch']) ? (int)$_POST['batch'] : 500;
-        echo json_encode(mikhmon_import_chunk($session, $batch));
-        break;
-    case 'delete':
-        $batch = isset($_POST['batch']) ? (int)$_POST['batch'] : 300;
-        echo json_encode(mikhmon_import_delete($session, $batch));
-        break;
-    default:
-        echo json_encode(array('ok' => false, 'error' => 'aksi tidak dikenal'));
+$runId = isset($_POST['run_id']) ? (int)$_POST['run_id'] : 0;
+$service = new \Mikhmon\Sync\SalesSyncService(mikhmon_database());
+try {
+    if ($action === 'status') {
+        echo json_encode($service->status($session), JSON_UNESCAPED_SLASHES);
+    } elseif ($action === 'prepare') {
+        echo json_encode($service->start($session), JSON_UNESCAPED_SLASHES);
+    } elseif ($action === 'chunk' && $runId > 0) {
+        echo json_encode($service->importChunk($session, $runId), JSON_UNESCAPED_SLASHES);
+    } else {
+        echo json_encode(array('ok' => false, 'error' => 'gunakan process/sales_sync.php'));
+    }
+} catch (Throwable $e) {
+    echo json_encode(array('ok' => false, 'error' => $e->getMessage()));
 }

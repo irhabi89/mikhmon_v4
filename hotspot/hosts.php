@@ -52,6 +52,16 @@ if (!isset($_SESSION["mikhmon"])) {
 			"count-only" => "",
 		));
 	}
+
+	$allhosts = $gethosts;
+	$totalHosts = count($allhosts);
+	$page = \Mikhmon\Support\Pagination::page(isset($_GET['page']) ? $_GET['page'] : 1);
+	$perPage = \Mikhmon\Support\Pagination::perPage(isset($_GET['per_page']) ? $_GET['per_page'] : 50);
+	$pages = \Mikhmon\Support\Pagination::pages($totalHosts, $perPage);
+	if ($page > $pages) { $page = $pages; }
+	$gethosts = array_slice($allhosts, ($page - 1) * $perPage, $perPage);
+	$TotalReg = count($gethosts);
+	$baseUrl = $_SERVER['REQUEST_URI'];
 }
 ?>
 <div class="row">
@@ -131,6 +141,7 @@ for ($i = 0; $i < $TotalReg; $i++) {
 ?>
   </tbody>
 </table>
+<div class="mm-pagination-wrap"><?= mikhmon_pager($totalHosts, $page, $perPage, $baseUrl); ?><span class="mm-per-page"><?= mikhmon_per_page($perPage, $baseUrl); ?></span></div>
 </div>
 </div>
 </tr>

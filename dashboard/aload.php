@@ -33,6 +33,10 @@ include('../lang/'.$langid.'.php');
   include('../include/config.php');
   include('../include/readcfg.php');
 
+  // Do not hold the PHP session lock while talking to the router.
+  $need_logging_setup = ($load === 'logs') && empty($_SESSION[$session.'logging_disk']);
+  session_write_close();
+
 // routeros api
   include_once('../lib/routeros_api.class.php');
   include_once('../lib/formatbytesbites.php');
@@ -204,14 +208,16 @@ include('../lang/'.$langid.'.php');
   $API->connect($iphost, $userhost, decrypt($passwdhost));
 
   // check/move hotspot log to disk once per session instead of every 10s
-  if (empty($_SESSION[$session.'logging_disk'])) {
+  if ($need_logging_setup) {
     $getlogging = $API->comm("/system/logging/print", array("?prefix" => "->", ".proplist" => ".id,prefix"));
-    if (isset($getlogging[0]['prefix']) && $getlogging[0]['prefix'] == "->") {
-      $_SESSION[$session.'logging_disk'] = true;
-    } else {
+    if (!(isset($getlogging[0]['prefix']) && $getlogging[0]['prefix'] == "->")) {
       $API->comm("/system/logging/add", array("action" => "disk", "prefix" => "->", "topics" => "hotspot,info,debug"));
-      $_SESSION[$session.'logging_disk'] = true;
     }
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+      @session_start();
+    }
+    $_SESSION[$session.'logging_disk'] = true;
+    session_write_close();
   }
 
   // get hotspot log with light proplist to save WAN bandwidth

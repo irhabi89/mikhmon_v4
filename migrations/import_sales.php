@@ -1,49 +1,65 @@
 <?php
 /*
- * Mikhmon v3 Phase 5: import sales records ("vcr") from router scripts.
- *
- * The report page has an Import panel for everyday use; this CLI is for
- * batch/step-by-step migration (e.g. one month at a time for routers with
- * tens of thousands of records).
+ * CLI sales sync.
  *
  * Usage:
- *   php migrations/import_sales.php [--dry-run] [--delete] [--month MMMMYYYY]
+ *   bin/mikhmon sync:run --session=livebarokah
+ *   php migrations/import_sales.php --session=livebarokah [--month=nov2026] [--json]
+ *   php migrations/import_sales.php --all-sessions
  *
- *   --dry-run         report counts, write nothing (read-only).
- *   --delete          after a successful import, remove the imported scripts
- *                     from that router. NOT needed for day-to-day use: if
- *                     omitted, the router keeps recording and the app can
- *                     import the new records later.
- *   --month MMMMYYYY  only import records for one month (e.g. nov2026).
- *
- * For large routers (50k+ records) use a higher PHP memory limit, e.g.
- *   php -d memory_limit=2G migrations/import_sales.php
+ * The old per-row importer is replaced by the streamed snapshot/import pipeline.
  */
-require_once dirname(__DIR__) . '/lib/sales_import.php';
+if (PHP_SAPI !== 'cli') {
+    http_response_code(403);
+    exit('CLI only');
+}
+require_once dirname(__DIR__) . '/include/bootstrap.php';
 
-$opts = array('dry_run' => false, 'delete' => false, 'month' => null);
-$argv = $_SERVER['argv'] ?? array();
-for ($i = 1; $i < count($argv); $i++) {
-    if ($argv[$i] === '--dry-run') {
-        $opts['dry_run'] = true;
-    } elseif ($argv[$i] === '--delete') {
-        $opts['delete'] = true;
-    } elseif ($argv[$i] === '--month' && isset($argv[$i + 1])) {
-        $opts['month'] = $argv[++$i];
-    }
+$options = getopt('', array('session:', 'month::', 'all-sessions', 'json', 'help'));
+if (isset($options['help'])) {
+    echo "Usage: php migrations/import_sales.php --session=NAME [--month=MMMYYYY] [--json]\n";
+    echo "       php migrations/import_sales.php --all-sessions\n";
+    exit(0);
 }
 
-$t0 = microtime(true);
-$totalImported = 0;
-foreach (mikhmon_sessions_all() as $session) {
-    $res = mikhmon_import_sales_session($session, $opts);
-    if (empty($res['ok'])) {
-        echo "$session: " . $res['error'] . "\n";
-        continue;
+$service = new \Mikhmon\Sync\SalesSyncService(mikhmon_database());
+$sessions = array();
+if (!empty($options['session'])) {
+    $sessions[] = (string)$options['session'];
+} elseif (isset($options['all-sessions'])) {
+    $rows = mikhmon_database()->fetchAll('SELECT name FROM mikhmon_sessions ORDER BY name');
+    foreach ($rows as $row) {
+        $sessions[] = (string)$row['name'];
     }
-    printf("%s: total=%d imported=%d deleted=%d%s\n",
-        $session, $res['total'], $res['imported'], $res['deleted'],
-        $opts['month'] !== null ? " (month=" . $opts['month'] . ")" : "");
-    $totalImported += $res['imported'];
+} else {
+    fwrite(STDERR, "Use --session=NAME or --all-sessions\n");
+    exit(2);
 }
-printf("import_sales: total_imported=%d (%.1fs)\n", $totalImported, microtime(true) - $t0);
+
+$exit = 0;
+foreach ($sessions as $session) {
+    try {
+        $status = $service->runNow($session, isset($options['month']) ? (string)$options['month'] : null);
+        if (isset($options['json'])) {
+            echo json_encode($status, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), "\n";
+            continue;
+        }
+        printf(
+            "%s: router=%d db=%d matched=%d missing=%d extra=%s invalid=%d coverage=%s exact=%s in_sync=%s\n",
+            $session,
+            (int)$status['router']['records'],
+            (int)$status['db']['total'],
+            (int)$status['db']['matched'],
+            (int)$status['db']['missing'],
+            $status['db']['extra'] === null ? 'n/a' : (string)$status['db']['extra'],
+            (int)$status['db']['invalid'],
+            $status['coverage'] === null ? 'n/a' : $status['coverage'] . '%',
+            $status['exact'] === null ? 'n/a' : $status['exact'] . '%',
+            $status['in_sync'] ? 'yes' : 'no'
+        );
+    } catch (Throwable $e) {
+        fwrite(STDERR, $session . ': ' . $e->getMessage() . "\n");
+        $exit = 1;
+    }
+}
+exit($exit);

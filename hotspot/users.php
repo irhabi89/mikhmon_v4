@@ -71,6 +71,18 @@ if (!isset($_SESSION["mikhmon"])) {
   }
   $getprofile = $API->comm("/ip/hotspot/user/profile/print");
   $TotalReg2 = count($getprofile);
+
+  // Paginate only the rendered rows; comment aggregation still uses the full
+  // list so the comment filter counts stay accurate.
+  $allusers = $getuser;
+  $totalUsers = count($allusers);
+  $page = \Mikhmon\Support\Pagination::page(isset($_GET['page']) ? $_GET['page'] : 1);
+  $perPage = \Mikhmon\Support\Pagination::perPage(isset($_GET['per_page']) ? $_GET['per_page'] : 50);
+  $pages = \Mikhmon\Support\Pagination::pages($totalUsers, $perPage);
+  if ($page > $pages) { $page = $pages; }
+  $getuser = array_slice($allusers, ($page - 1) * $perPage, $perPage);
+  $TotalReg = count($getuser);
+  $baseUrl = $_SERVER['REQUEST_URI'];
 }
 ?>
 
@@ -118,10 +130,10 @@ if (!isset($_SESSION["mikhmon"])) {
     } else {
       echo "<option value=''>".$_comment."</option>";
     }
-    $TotalReg = count($getuser);
-    for ($i = 0; $i < $TotalReg; $i++) {
-      $ucomment = $getuser[$i]['comment'];
-      $uprofile = $getuser[$i]['profile'];
+    $TotalRegAll = count($allusers);
+    for ($i = 0; $i < $TotalRegAll; $i++) {
+      $ucomment = $allusers[$i]['comment'];
+      $uprofile = $allusers[$i]['profile'];
       $acomment .= ",".$ucomment."#". $uprofile;
     }
 
@@ -259,6 +271,10 @@ for ($i = 0; $i < $TotalReg; $i++) {
   </tr>
   </tbody>
 </table>
+</div>
+<div class="mm-pagination-wrap">
+  <?= mikhmon_pager($totalUsers, $page, $perPage, $baseUrl); ?>
+  <span class="mm-per-page"><?= mikhmon_per_page($perPage, $baseUrl); ?></span>
 </div>
 </div>
 </div>

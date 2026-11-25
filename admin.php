@@ -62,6 +62,8 @@ if (empty($_SESSION['theme'])) {
 include_once('./include/headhtml.php');
 include('./include/config.php');
 include('./include/readcfg.php');
+require_once(__DIR__ . '/include/bootstrap.php');
+require_once(__DIR__ . '/include/ui.php');
 
 include_once('./lib/routeros_api.class.php');
 include_once('./lib/formatbytesbites.php');
@@ -183,7 +185,7 @@ if ($id == "login" || substr($url, -1) == "p") {
 }
 ?>
 <script src="js/mikhmon-ui.<?= $theme; ?>.min.js"></script>
-<script src="js/mikhmon.js?t=<?= str_replace(" ","_",date("Y-m-d H:i:s")); ?>"></script>
+<script src="js/mikhmon.js?t=<?= file_exists("js/mikhmon.js") ? filemtime("js/mikhmon.js") : "1"; ?>"></script>
 <?php if (file_exists('./include/info.php')) { include('./include/info.php'); } ?>
 </body>
 </html>
