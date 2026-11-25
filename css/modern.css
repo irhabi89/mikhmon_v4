@@ -18,6 +18,9 @@ body {
 
 /* Top bar */
 .navbar {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   height: 60px;
   padding: 0 14px;
   border-bottom: 1px solid var(--mm-border);
@@ -173,6 +176,8 @@ table .form-control { min-height: 34px; }
 /* Make old multi-column pages usable on tablets/phones */
 @media (max-width: 1000px) {
   #main { margin-left: 0 !important; }
+  .sidenav { width: 0; margin-left: 0; border-right: 0; }
+  body:not(.mm-nav-open) .sidenav > * { display: none; }
   .main-container { padding: 10px; }
   .col-3, .col-4, .col-5, .col-6, .col-7, .col-8, .col-9, .col-10, .col-11,
   .col-box-3, .col-box-4, .col-box-6 {
@@ -185,7 +190,12 @@ table .form-control { min-height: 34px; }
   .btn { min-height: 36px; }
 }
 @media (max-width: 600px) {
-  .navbar-right a { padding: 18px 8px; }
+  .navbar { padding: 0 6px; overflow: hidden; }
+  .navbar-left, .navbar-right { width: auto; }
+  .navbar-right a { padding: 18px 6px; }
+  .navbar-right .ses, .navbar-right .dropd { max-width: 112px; }
+  #cpage { max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #brand span { font-size: 15px; }
   .main-container { padding: 6px; }
   .box h1 { font-size: 22px; }
   .modal-window > div { width: 94%; margin: 10% auto; border-radius: 12px; }

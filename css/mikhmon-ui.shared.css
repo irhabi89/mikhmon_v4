@@ -1,7 +1,7 @@
 /*
  * Mikhmon shared UI layer.
  * Layout, spacing and component states only; colors come from the active
- * theme variables and existing bg-*/text-* utility classes.
+ * theme variables and existing bg- / text- utility classes.
  */
 body {
   --mm-bg: #2f353a;
@@ -311,7 +311,8 @@ body.mm-theme-blue { --mm-primary: #20a8d8; }
   .mm-table-wrap { max-height: 60vh; }
   .mm-table th,
   .mm-table td { padding: 7px 8px; }
-  .mm-field { min-width: 110px; flex: 1 1 110px; }
+  .mm-field { min-width: 0; flex: 1 1 140px; }
+  .mm-input, .mm-select { width: 100%; min-width: 0; }
   .mm-pagination-wrap { flex-direction: column; align-items: flex-start; }
 }
 

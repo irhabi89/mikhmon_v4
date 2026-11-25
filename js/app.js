@@ -1,6 +1,16 @@
 (function () {
   "use strict";
 
+  document.addEventListener("DOMContentLoaded", function () {
+    var open = document.getElementById("openNav");
+    var close = document.getElementById("closeNav");
+    if (open) { open.addEventListener("click", function () { document.body.classList.add("mm-nav-open"); }); }
+    if (close) { close.addEventListener("click", function () { document.body.classList.remove("mm-nav-open"); }); }
+    window.addEventListener("resize", function () {
+      if (window.innerWidth > 750) { document.body.classList.remove("mm-nav-open"); }
+    });
+  });
+
   function closeModalByHash() {
     if (window.location.hash) {
       history.replaceState(null, document.title, window.location.pathname + window.location.search);
