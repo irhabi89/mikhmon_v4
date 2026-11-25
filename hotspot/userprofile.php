@@ -32,12 +32,10 @@ if (!isset($_SESSION["mikhmon"])) {
 
 
 // get user profile
-	$getprofile = $API->comm("/ip/hotspot/user/profile/print");
+	$profileRead = mikhmon_router_cached($API, $session, '/ip/hotspot/user/profile/print', array(), 60);
+	$getprofile = (array)$profileRead['data'];
 	$TotalReg = count($getprofile);
-// count user profile
-	$countprofile = $API->comm("/ip/hotspot/user/profile/print", array(
-		"count-only" => "",
-	));
+	$countprofile = $TotalReg;
 
 	$allprofiles = $getprofile;
 	$totalProfiles = count($allprofiles);
@@ -93,20 +91,14 @@ for ($i = 0; $i < $TotalReg; $i++) {
 	$psharedu = $profiledetalis['shared-users'];
 	$pratelimit = $profiledetalis['rate-limit'];
 	$ponlogin = $profiledetalis['on-login'];
-	$getmonexpired = $API->comm("/system/scheduler/print", array(
-    "?name" => "$pname",
-  ));
-  $monexpired = $getmonexpired[0];
-  $monid = $monexpired['.id'];
-	$pmon = $monexpired['name'];
-	$chkpmon = $monexpired['disabled'];
-	if(empty($pmon) || $chkpmon == "true"){$moncolor = "text-orange";}else{$moncolor = "text-green";}
+  // Scheduler status is loaded asynchronously after the table is visible.
+  $moncolor = "text-muted";
 	echo "<tr>";
 	?>
   <td style='text-align:center;'><i class='fa fa-minus-square text-danger pointer' onclick="if(confirm('Are you sure to delete profile (<?= $pname; ?>)?')){loadpage('./?remove-user-profile=<?= $pid; ?>&pname=<?= $pname ?>&session=<?= $session; ?>')}else{}" title='Remove <?= $pname; ?>'></i>&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp
   <?php
 	echo "<a title='Open User by profile " . $pname . "'  href='./?hotspot=users&profile=" . $pname . "&session=" . $session . "'><i class='fa fa-users'></i></a></td>";
-	echo "<td><a title='Open User Profile " . $pname . "' href='./?user-profile=" . $pid . "&session=" . $session . "'><i class='fa fa-edit'></i> <i class='fa fa-ci fa-circle ".$moncolor."'></i> $pname</a></td>";
+	echo "<td><a title='Open User Profile " . $pname . "' href='./?user-profile=" . $pid . "&session=" . $session . "'><i class='fa fa-edit'></i> <i class='fa fa-ci fa-circle ".$moncolor."' data-sched-profile='".$pname."'></i> $pname</a></td>";
 //$profiledetalis = $ARRAY[$i];echo "<td>" . $profiledetalis['name'];echo "</td>";
 	echo "<td>" . $psharedu;
 	echo "</td>";
@@ -181,4 +173,22 @@ for ($i = 0; $i < $TotalReg; $i++) {
 </div>
 </div>
 </div>
+
+<script>
+(function () {
+  var nodes = document.querySelectorAll('[data-sched-profile]');
+  if (!nodes.length) { return; }
+  fetch('./process/profile_schedulers.php?session=' + encodeURIComponent(<?= json_encode((string)$session, JSON_UNESCAPED_SLASHES); ?>), {credentials: 'same-origin'})
+    .then(function (r) { if (!r.ok) { throw new Error('HTTP ' + r.status); } return r.json(); })
+    .then(function (payload) {
+      if (!payload || !payload.ok || !payload.data) { return; }
+      nodes.forEach(function (node) {
+        var key = node.getAttribute('data-sched-profile');
+        var row = payload.data[key];
+        node.className = 'fa fa-ci fa-circle ' + ((!row || !row.name || row.disabled === 'true') ? 'text-orange' : 'text-green');
+      });
+    })
+    .catch(function () { /* keep muted state; profile data is still usable */ });
+})();
+</script>
 </div>

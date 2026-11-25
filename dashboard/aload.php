@@ -38,7 +38,9 @@ include('../lang/'.$langid.'.php');
   session_write_close();
 
 // routeros api
+  require_once(__DIR__ . '/../include/bootstrap.php');
   include_once('../lib/routeros_api.class.php');
+  include_once('../lib/router.php');
   include_once('../lib/formatbytesbites.php');
   $API = new RouterosAPI();
   $API->debug = false;
@@ -202,7 +204,70 @@ include('../lang/'.$langid.'.php');
           </div>
           </div>
 
-<?php 
+<?php
+} else if ($load == "servers") {
+  try {
+    $API->connect($iphost, $userhost, decrypt($passwdhost));
+    $hotspotRead = mikhmon_router_cached($API, $session, '/ip/hotspot/print', array('.proplist' => 'name'), 20);
+    $activeRead = mikhmon_router_cached($API, $session, '/ip/hotspot/active/print', array('.proplist' => 'server'), 15);
+    $usersRead = mikhmon_router_cached($API, $session, '/ip/hotspot/user/print', array('.proplist' => 'server'), 15);
+
+    $dashSalesStats = array();
+    $salesRepo = new \Mikhmon\Storage\SalesRepository(mikhmon_database());
+    foreach ($salesRepo->serverStats($session) as $row) {
+      $dashSalesStats[(string)$row['server_name']] = $row;
+    }
+    $serverMap = array();
+    foreach ((array)$hotspotRead['data'] as $srv) {
+      $name = isset($srv['name']) ? trim((string)$srv['name']) : '';
+      if ($name !== '') { $serverMap[$name] = array('name' => $name, 'active' => 0, 'users' => 0); }
+    }
+    foreach ((array)$activeRead['data'] as $act) {
+      $name = isset($act['server']) ? trim((string)$act['server']) : '';
+      if ($name === '') { continue; }
+      if (!isset($serverMap[$name])) { $serverMap[$name] = array('name' => $name, 'active' => 0, 'users' => 0); }
+      $serverMap[$name]['active']++;
+    }
+    foreach ((array)$usersRead['data'] as $usr) {
+      $name = isset($usr['server']) ? trim((string)$usr['server']) : '';
+      if ($name === '' || $name === 'all') { continue; }
+      if (!isset($serverMap[$name])) { $serverMap[$name] = array('name' => $name, 'active' => 0, 'users' => 0); }
+      $serverMap[$name]['users']++;
+    }
+    foreach ($dashSalesStats as $name => $row) {
+      if ($name === '__none__') { continue; }
+      if (!isset($serverMap[$name])) { $serverMap[$name] = array('name' => $name, 'active' => 0, 'users' => 0); }
+    }
+    if (isset($dashSalesStats['__none__'])) {
+      $serverMap['__none__'] = array('name' => '__none__', 'active' => 0, 'users' => 0);
+    }
+    $serverRows = array();
+    foreach ($serverMap as $name => $base) {
+      $stats = isset($dashSalesStats[$name]) ? $dashSalesStats[$name] : null;
+      $serverRows[] = array(
+        'name' => $name,
+        'active' => (int)$base['active'],
+        'users' => (int)$base['users'],
+        'today_count' => $stats ? (int)$stats['today_count'] : 0,
+        'today_sum' => $stats ? (float)$stats['today_sum'] : 0.0,
+        'month_count' => $stats ? (int)$stats['month_count'] : 0,
+        'month_sum' => $stats ? (float)$stats['month_sum'] : 0.0,
+      );
+    }
+    $dash_spr_indo = (isset($cekindo['indo']) && is_array($cekindo['indo'])) ? $cekindo['indo'] : array('Rp');
+    $dash_spr_dec = in_array((string)(isset($currency) ? $currency : 'Rp'), $dash_spr_indo) ? 0 : 2;
+    $dash_spr_fmt = function ($v) use ($currency, $dash_spr_dec) {
+      return $currency . ' ' . number_format((float)$v, $dash_spr_dec, ',', '.');
+    };
+    \Mikhmon\Http\View::render('components/server-cards', array(
+      'rows' => $serverRows,
+      'formatMoney' => $dash_spr_fmt,
+      'session' => $session,
+      'cachedAt' => max((int)$hotspotRead['created_at'], (int)$activeRead['created_at'], (int)$usersRead['created_at']),
+    ));
+  } catch (\Throwable $e) {
+    echo '<div class="card" style="margin-top:10px;"><div class="card-header"><h3><i class="fa fa-server"></i> Per Server</h3></div><div class="card-body"><span class="text-red">Data server gagal dimuat: ' . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8') . '. <a href="?session=' . urlencode((string)$session) . '&refresh=1">Coba lagi</a></span></div></div>';
+  }
 } else if ($load == "logs") {
 
   $API->connect($iphost, $userhost, decrypt($passwdhost));

@@ -15,3 +15,5 @@ data/config.php.bak
 /data/*.bak-*
 /data/*.db.backup
 /data/*.backup
+
+data/cache/

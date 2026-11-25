@@ -31,6 +31,7 @@ class RouterosAPI
     var $error_str;         //  Variable for storing connection error text, if any
     var $last_error = '';   //  Last socket/protocol error (human readable)
     var $last_ret   = null; //  Last "ret" value returned by the router
+    var $last_complete = true; //  Last response reached !done without timeout/EOF
     private $empty_reads = 0;
 
     /* Check, can be var used in foreach  */
@@ -625,6 +626,7 @@ class RouterosAPI
             return $this->readRawWords();
         }
         $res = $this->readResponse(null, microtime(true) + $this->read_timeout, true);
+        $this->last_complete = !empty($res['ok']) && empty($res['fatal']) && empty($res['trap']);
 
         if (!empty($res['fatal'])) {
             return array('!fatal' => $res['fatal']);
@@ -742,8 +744,11 @@ class RouterosAPI
      */
     public function comm($com, $arr = array())
     {
+        $this->last_complete = true;
+        $this->last_error = '';
         $this->sendCommand($com, $arr);
-        return $this->read();
+        $result = $this->read();
+        return $result;
     }
 
     /**

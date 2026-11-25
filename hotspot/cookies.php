@@ -25,9 +25,7 @@ if (!isset($_SESSION["mikhmon"])) {
 	$getcookies = $API->comm("/ip/hotspot/cookie/print");
 	$TotalReg = count($getcookies);
 
-	$countcookies = $API->comm("/ip/hotspot/cookie/print", array(
-		"count-only" => "",
-	));
+	$countcookies = $TotalReg;
 
 	$allcookies = $getcookies;
 	$totalCookies = count($allcookies);

@@ -25,9 +25,7 @@ if (!isset($_SESSION["mikhmon"])) {
 	$getbinding = $API->comm("/ip/hotspot/ip-binding/print");
 	$TotalReg = count($getbinding);
 
-	$countbinding = $API->comm("/ip/hotspot/ip-binding/print", array(
-		"count-only" => "",
-	));
+	$countbinding = $TotalReg;
 
 	$allbindings = $getbinding;
 	$totalBindings = count($allbindings);

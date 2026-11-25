@@ -27,30 +27,19 @@ if (!isset($_SESSION["mikhmon"])) {
 			"?bypassed" => "yes",
 		));
 		$TotalReg = count($gethosts);
-
-		$counthosts = $API->comm("/ip/hotspot/host/print", array(
-			"?bypassed" => "yes",
-			"count-only" => "",
-		));
+		$counthosts = $TotalReg;
 
 	} elseif ($hotspot == "hosta") {
 		$gethosts = $API->comm("/ip/hotspot/host/print", array(
 			"?authorized" => "yes",
 		));
 		$TotalReg = count($gethosts);
-
-		$counthosts = $API->comm("/ip/hotspot/host/print", array(
-			"?authorized" => "yes",
-			"count-only" => "",
-		));
+		$counthosts = $TotalReg;
 
 	} else {
 		$gethosts = $API->comm("/ip/hotspot/host/print");
 		$TotalReg = count($gethosts);
-
-		$counthosts = $API->comm("/ip/hotspot/host/print", array(
-			"count-only" => "",
-		));
+		$counthosts = $TotalReg;
 	}
 
 	$allhosts = $gethosts;

@@ -75,56 +75,6 @@ if (!isset($_SESSION["mikhmon"])) {
   // Per-server overview: DB sales + live hotspot active/user counts.
   require_once(__DIR__ . '/../include/bootstrap.php');
   mikhmon_require_schema();
-  $dash_sales = new \Mikhmon\Storage\SalesRepository(mikhmon_database());
-  $dashSalesStats = array();
-  foreach ($dash_sales->serverStats($session) as $row) {
-    $dashSalesStats[(string)$row['server_name']] = $row;
-  }
-  $dashServerMap = array();
-  foreach ((array)$API->comm('/ip/hotspot/print', array('.proplist' => 'name')) as $srv) {
-    $name = isset($srv['name']) ? trim((string)$srv['name']) : '';
-    if ($name !== '' && !isset($dashServerMap[$name])) {
-      $dashServerMap[$name] = array('name' => $name, 'active' => 0, 'users' => 0);
-    }
-  }
-  foreach ((array)$API->comm('/ip/hotspot/active/print', array('.proplist' => 'server')) as $act) {
-    $name = isset($act['server']) ? trim((string)$act['server']) : '';
-    if ($name === '') { continue; }
-    if (!isset($dashServerMap[$name])) { $dashServerMap[$name] = array('name' => $name, 'active' => 0, 'users' => 0); }
-    $dashServerMap[$name]['active']++;
-  }
-  foreach ((array)$API->comm('/ip/hotspot/user/print', array('.proplist' => 'server')) as $usr) {
-    $name = isset($usr['server']) ? trim((string)$usr['server']) : '';
-    if ($name === '' || $name === 'all') { continue; }
-    if (!isset($dashServerMap[$name])) { $dashServerMap[$name] = array('name' => $name, 'active' => 0, 'users' => 0); }
-    $dashServerMap[$name]['users']++;
-  }
-  foreach ($dashSalesStats as $name => $row) {
-    if ($name === '__none__') { continue; }
-    if (!isset($dashServerMap[$name])) { $dashServerMap[$name] = array('name' => $name, 'active' => 0, 'users' => 0); }
-  }
-  if (isset($dashSalesStats['__none__'])) {
-    $dashServerMap['__none__'] = array('name' => '__none__', 'active' => 0, 'users' => 0);
-  }
-  $dashServerRows = array();
-  foreach ($dashServerMap as $name => $base) {
-    $stats = isset($dashSalesStats[$name]) ? $dashSalesStats[$name] : null;
-    $dashServerRows[] = array(
-      'name' => $name,
-      'active' => (int)$base['active'],
-      'users' => (int)$base['users'],
-      'today_count' => $stats ? (int)$stats['today_count'] : 0,
-      'today_sum' => $stats ? (float)$stats['today_sum'] : 0.0,
-      'month_count' => $stats ? (int)$stats['month_count'] : 0,
-      'month_sum' => $stats ? (float)$stats['month_sum'] : 0.0,
-    );
-  }
-  $dash_spr_indo = (isset($cekindo['indo']) && is_array($cekindo['indo'])) ? $cekindo['indo'] : array('Rp');
-  $dash_spr_dec = in_array((string)(isset($currency) ? $currency : 'Rp'), $dash_spr_indo) ? 0 : 2;
-  $dash_spr_fmt = function ($v) use ($currency, $dash_spr_dec) {
-    return $currency . ' ' . number_format((float)$v, $dash_spr_dec, ',', '.');
-  };
-
   if ($livereport == "disable") {
     $logh = "457px";
     $lreport = "style='display:none;'";
@@ -299,11 +249,10 @@ if (!isset($_SESSION["mikhmon"])) {
             </div>
           </div>
           </div>
-            <?php \Mikhmon\Http\View::render('components/server-cards', array(
-              'rows' => $dashServerRows,
-              'formatMoney' => $dash_spr_fmt,
-              'session' => $session,
-            )); ?>
+            <div id="mmServerCards" class="card" style="margin-top:10px;">
+              <div class="card-header"><h3><i class="fa fa-server"></i> Per Server</h3></div>
+              <div class="card-body"><span class="mm-muted"><i class="fa fa-circle-o-notch fa-spin"></i> Memuat data server...</span></div>
+            </div>
             <div class="card">
               <div class="card-header"><h3><i class="fa fa-area-chart"></i> <?= $_traffic ?> </h3></div>
 
@@ -485,3 +434,19 @@ if (!isset($_SESSION["mikhmon"])) {
             </div>
 </div>
 </div>
+
+<script>
+(function () {
+  var el = document.getElementById('mmServerCards');
+  if (!el) { return; }
+  var mmSession = <?= json_encode((string)$session, JSON_UNESCAPED_SLASHES); ?>;
+  var qs = '?load=servers&session=' + encodeURIComponent(mmSession);
+  <?php if (isset($_GET['refresh']) && (string)$_GET['refresh'] === '1'): ?>qs += '&refresh=1';<?php endif; ?>
+  fetch('./dashboard/aload.php' + qs, {credentials: 'same-origin'})
+    .then(function (r) { if (!r.ok) { throw new Error('HTTP ' + r.status); } return r.text(); })
+    .then(function (html) { el.outerHTML = html; })
+    .catch(function (err) {
+      el.innerHTML = '<div class="card-header"><h3><i class="fa fa-server"></i> Per Server</h3></div><div class="card-body"><span class="text-red">Data server gagal dimuat. <a href="?session=' + encodeURIComponent(mmSession) + '&refresh=1">Coba lagi</a></span></div>';
+    });
+})();
+</script>

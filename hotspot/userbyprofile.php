@@ -32,6 +32,23 @@ if (!isset($_SESSION["mikhmon"])) {
 	<h3><i class=" fa fa-users"></i> <?= $_vouchers ?> &nbsp;&nbsp; | &nbsp;&nbsp;<i onclick="location.reload();" class="fa fa-refresh pointer" title="Reload data"></i></h3>
 </div>
 <div class="card-body">
+<?php
+// One cached read supplies all profile counts; avoid one API call per card.
+$profileUserCounts = array();
+$totalProfileUsers = 0;
+try {
+  $profileUsers = mikhmon_router_cached($API, $session, '/ip/hotspot/user/print', array('.proplist' => 'profile'), 30);
+  foreach ((array)$profileUsers['data'] as $profileUserRow) {
+    $profileUserProfile = isset($profileUserRow['profile']) ? (string)$profileUserRow['profile'] : '';
+    if ($profileUserProfile !== '') {
+      $profileUserCounts[$profileUserProfile] = isset($profileUserCounts[$profileUserProfile]) ? $profileUserCounts[$profileUserProfile] + 1 : 1;
+      $totalProfileUsers++;
+    }
+  }
+} catch (Throwable $profileCountError) {
+  $profileCountError = $profileCountError->getMessage();
+}
+?>
 <div class="overflow" style="max-height: 80vh">	
 <div class="row">	
       <div class="col-4">
@@ -43,7 +60,7 @@ if (!isset($_SESSION["mikhmon"])) {
             </div>
               <div class="box-group-area">
                 <h3 >Profile : all<br>
-                <?php $countuser = $API->comm("/ip/hotspot/user/print", array("count-only" => ""));
+                <?php $countuser = $totalProfileUsers;
                 if ($countuser < 2) {
                   echo $countuser . " Item";
                 } elseif ($countuser > 1) {
@@ -75,7 +92,7 @@ for ($i = 0; $i < $TotalReg; $i++) {
             </div>
               <div class="box-group-area">
                 <h3 >Profile : <?= $pname; ?><br>
-                <?php	$countuser = $API->comm("/ip/hotspot/user/print", array("count-only" => "", "?profile" => "$pname", ));
+                <?php	$countuser = isset($profileUserCounts[$pname]) ? $profileUserCounts[$pname] : 0;
                 if ($countuser < 2) {
                   echo $countuser . " Item";
                 } elseif ($countuser > 1) {

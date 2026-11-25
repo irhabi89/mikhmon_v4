@@ -48,3 +48,23 @@ if (!function_exists('mikhmon_require_schema')) {
         }
     }
 }
+
+if (isset($_GET['session']) && class_exists('\\Mikhmon\\Support\\ResultCache')) {
+    $mikhmon_mutation_keys = array(
+        'remove-hotspot-user', 'remove-hotspot-users', 'remove-hotspot-user-by-comment',
+        'remove-hotspot-user-expired', 'remove-host', 'remove-cookie', 'remove-ip-binding',
+        'remove-user-active', 'remove-user-profile', 'reset-hotspot-user',
+        'enable-hotspot-user', 'disable-hotspot-user', 'remove-pactive', 'remove-pprofile',
+        'remove-pppsecret', 'enable-pppsecret', 'disable-pppsecret',
+        'remove-scheduler', 'enable-scheduler', 'disable-scheduler',
+    );
+    $mikhmon_is_mutation = (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST');
+    if (!$mikhmon_is_mutation) {
+        foreach ($mikhmon_mutation_keys as $mikhmon_mutation_key) {
+            if (isset($_GET[$mikhmon_mutation_key])) { $mikhmon_is_mutation = true; break; }
+        }
+    }
+    if ($mikhmon_is_mutation) {
+        \Mikhmon\Support\ResultCache::flushSession((string)$_GET['session']);
+    }
+}

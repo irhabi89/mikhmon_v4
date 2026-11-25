@@ -26,20 +26,13 @@ if (!isset($_SESSION["mikhmon"])) {
   if ($prof == "all") {
     $getuser = $API->comm("/ip/hotspot/user/print");
     $TotalReg = count($getuser);
-
-    $counttuser = $API->comm("/ip/hotspot/user/print", array(
-      "count-only" => ""
-    ));
+    $counttuser = $TotalReg;
   } elseif ($prof != "all") {
     $getuser = $API->comm("/ip/hotspot/user/print", array(
       "?profile" => "$prof",
     ));
     $TotalReg = count($getuser);
-
-    $counttuser = $API->comm("/ip/hotspot/user/print", array(
-      "count-only" => "",
-      "?profile" => "$prof",
-    ));
+    $counttuser = $TotalReg;
 
   }
   if ($comm != "") {
@@ -48,11 +41,7 @@ if (!isset($_SESSION["mikhmon"])) {
     //"?uptime" => "00:00:00"
     ));
     $TotalReg = count($getuser);
-
-    $counttuser = $API->comm("/ip/hotspot/user/print", array(
-      "count-only" => "",
-      "?comment" => "$comm",
-    ));
+    $counttuser = $TotalReg;
   }
 }
 ?>

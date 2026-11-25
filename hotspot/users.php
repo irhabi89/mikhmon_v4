@@ -26,17 +26,26 @@ if (!isset($_SESSION["mikhmon"])) {
 
   // Read profiles before the (possibly very large) user list. If a user-list
   // read is slow the profile dropdown still has the correct source.
-  $getprofile = $API->comm("/ip/hotspot/user/profile/print");
+  $profileRead = mikhmon_router_cached($API, $session, '/ip/hotspot/user/profile/print', array(), 60);
+  $getprofile = (array)$profileRead['data'];
   $TotalReg2 = count($getprofile);
 
-  // Fetch the users once, then apply the profile/comment/expiry filters in
-  // PHP. This avoids a second slow API round-trip for profile counts and keeps
-  // the profile dropdown independent from whichever filter is active.
-  $allusersRaw = $API->comm("/ip/hotspot/user/print");
-  $getuser = $allusersRaw;
+  // Fetch only the rows needed for the active filter. The profile-only
+  // count source is cached separately, so filtering never downloads the full
+  // detailed list just to populate the profile dropdown.
   $prof = isset($prof) ? (string)$prof : '';
   $comm = isset($comm) ? (string)$comm : '';
   $exp = isset($_GET['exp']) ? (string)$_GET['exp'] : '';
+  $userFields = '.id,server,name,password,profile,mac-address,uptime,bytes-in,bytes-out,comment,disabled,limit-uptime,limit-bytes-total';
+  $userParams = array('.proplist' => $userFields);
+  if ($prof !== '' && $prof !== 'all') { $userParams['?profile'] = $prof; }
+  if ($comm !== '') { $userParams['?comment'] = $comm; }
+  if ($exp !== '') { $userParams['?limit-uptime'] = '1s'; }
+  $usersRead = mikhmon_router_cached($API, $session, '/ip/hotspot/user/print', $userParams, 15);
+  $allusersRaw = (array)$usersRead['data'];
+  $usersCached = !empty($usersRead['cached']);
+  $usersCacheTime = !empty($usersRead['created_at']) ? (int)$usersRead['created_at'] : 0;
+  $getuser = $allusersRaw;
   if ($prof !== '' && $prof !== 'all') {
     $getuser = array_values(array_filter($getuser, function ($userRow) use ($prof) {
       return isset($userRow['profile']) && (string)$userRow['profile'] === $prof;
@@ -55,13 +64,18 @@ if (!isset($_SESSION["mikhmon"])) {
   $TotalReg = count($getuser);
   $counttuser = $TotalReg;
 
+  $profileCountSource = $allusersRaw;
+  if ($prof !== '' || $comm !== '' || $exp !== '') {
+    $profileCountRead = mikhmon_router_cached($API, $session, '/ip/hotspot/user/print', array('.proplist' => 'profile'), 60);
+    $profileCountSource = (array)$profileCountRead['data'];
+  }
   $profileCounts = array();
   foreach ($getprofile as $profileRow) {
     $pn = isset($profileRow['name']) ? (string)$profileRow['name'] : '';
     if ($pn !== '') { $profileCounts[$pn] = 0; }
   }
-  $totalAllUsers = count($allusersRaw);
-  foreach ($allusersRaw as $userRow) {
+  $totalAllUsers = count($profileCountSource);
+  foreach ($profileCountSource as $userRow) {
     $pn = isset($userRow['profile']) ? (string)$userRow['profile'] : '';
     if ($pn !== '') { $profileCounts[$pn] = isset($profileCounts[$pn]) ? $profileCounts[$pn] + 1 : 1; }
   }

@@ -145,3 +145,41 @@ function mikhmon_router_error($api)
     }
     return '';
 }
+
+/**
+ * Read a complete RouterOS result through the short-lived result cache.
+ * Returns ResultCache metadata: data, cached, created_at, stale, error.
+ * The producer refuses to cache a timeout/partial response.
+ *
+ * @param RouterosAPI $api
+ * @param string      $session
+ * @param string      $command
+ * @param array       $params
+ * @param int|null    $ttl
+ * @return array{data:mixed,cached:bool,created_at:int,stale:bool,error:string}
+ */
+function mikhmon_router_cached($api, $session, $command, array $params = array(), $ttl = null)
+{
+    if (!$api instanceof RouterosAPI) {
+        throw new RuntimeException('Router is not connected');
+    }
+    $ttl = $ttl === null ? \Mikhmon\Support\ResultCache::ttl(15) : (int)$ttl;
+    $key = $command . '|' . json_encode($params);
+    return \Mikhmon\Support\ResultCache::remember((string)$session, $key, $ttl, function () use ($api, $command, $params) {
+        $result = $api->comm($command, $params);
+        if (property_exists($api, 'last_complete') && !$api->last_complete) {
+            throw new RuntimeException($api->last_error !== '' ? $api->last_error : 'incomplete router response');
+        }
+        return $result;
+    });
+}
+
+/**
+ * Invalidate all cached read results for one router session.
+ */
+function mikhmon_cache_flush_session($session)
+{
+    if (class_exists('\\Mikhmon\\Support\\ResultCache')) {
+        \Mikhmon\Support\ResultCache::flushSession((string)$session);
+    }
+}
