@@ -33,8 +33,17 @@
     }
   });
 
-  // Turn wide legacy tables into horizontally scrollable regions.
   document.addEventListener("DOMContentLoaded", function () {
+    document.querySelectorAll("form.mm-toolbar").forEach(function (form) {
+      form.addEventListener("submit", function () {
+        form.querySelectorAll("input[name], select[name]").forEach(function (field) {
+          if (field.type === "hidden") { return; }
+          if (field.value === "") { field.disabled = true; }
+        });
+      });
+    });
+
+    // Turn wide legacy tables into horizontally scrollable regions.
     document.querySelectorAll("table.table").forEach(function (table) {
       var parent = table.parentElement;
       if (!parent || parent.classList.contains("overflow") || parent.classList.contains("mm-table-wrap")) { return; }

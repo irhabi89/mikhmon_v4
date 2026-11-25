@@ -38,7 +38,7 @@
   }
 
 // bad request
-  elseif (substr($url, -1) == "=") {
+  elseif ($session === '' && substr($url, -1) == "=") {
     echo "<b class='cl-w'><i class='fa fa-circle-o-notch fa-spin' style='font-size:24px'></i> Bad request! redirect to Home......</b>";
 
     echo "<script>window.location='./'</script>";
