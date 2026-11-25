@@ -253,11 +253,21 @@ final class SalesRepository
     /**
      * @return array<string,mixed>
      */
-    public function stats(string $session): array
+    public function stats(string $session, ?string $server = null): array
     {
         $thisMonth = date('Y-m');
         $prevMonth = date('Y-m', strtotime(date('Y-m-01') . ' -1 month'));
         $today = date('Y-m-d');
+        $serverWhere = '';
+        $params = array($thisMonth, $thisMonth, $prevMonth, $today, $today, $session);
+        if ($server !== null && $server !== '') {
+            if ($server === '__none__') {
+                $serverWhere = " AND server_name = ''";
+            } else {
+                $serverWhere = ' AND server_name = ?';
+                $params[] = $server;
+            }
+        }
         $row = $this->db->fetchOne(
             'SELECT COUNT(*) AS total_count,
                     COALESCE(SUM(price),0) AS total_sum,
@@ -266,8 +276,8 @@ final class SalesRepository
                     COALESCE(SUM(CASE WHEN month_key = ? THEN price ELSE 0 END),0) AS prev_sum,
                     COALESCE(SUM(CASE WHEN date_key = ? THEN 1 ELSE 0 END),0) AS today_count,
                     COALESCE(SUM(CASE WHEN date_key = ? THEN price ELSE 0 END),0) AS today_sum
-             FROM sales_records WHERE session = ?',
-            array($thisMonth, $thisMonth, $prevMonth, $today, $today, $session)
+             FROM sales_records WHERE session = ?' . $serverWhere,
+            $params
         );
         if (!is_array($row)) {
             $row = array();

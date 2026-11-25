@@ -59,7 +59,7 @@ $filter = array(
     'server' => $serverFilter,
 );
 $data = $sales->paginate($session, $filter, $page, $perPage, 'date', 'desc');
-$stats = $sales->stats($session);
+$stats = $sales->stats($session, $serverFilter !== '' ? $serverFilter : null);
 $status = $service->summary($session);
 $serverNames = $sales->serverNames($session);
 $csrf = \Mikhmon\Http\Csrf::token();
