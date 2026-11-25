@@ -118,33 +118,39 @@ if (!isset($_SESSION["mikhmon"])) {
       ?>
     </select>
   </div>
+  <?php
+  // Build comment choices from ALL users, never from the filtered result,
+  // otherwise selecting one comment leaves only that comment in the dropdown.
+  $commentBaseUrl = './?hotspot=users&session=' . rawurlencode((string)$session);
+  if ($prof !== '' && $prof !== 'all') {
+    $commentBaseUrl .= '&profile=' . rawurlencode((string)$prof);
+  }
+  $acomment = '';
+  foreach ($allusersRaw as $commentUser) {
+    $uc = isset($commentUser['comment']) ? (string)$commentUser['comment'] : '';
+    $up = isset($commentUser['profile']) ? (string)$commentUser['profile'] : '';
+    if ($uc !== '') { $acomment .= ',' . $uc . '#' . $up; }
+  }
+  $commentCounts = array_count_values(explode(',', ltrim($acomment, ',')));
+  $commentOptions = array();
+  foreach ($commentCounts as $key => $count) {
+    $parts = explode('#', $key, 2);
+    $uc = (string)$parts[0];
+    $up = isset($parts[1]) ? (string)$parts[1] : '';
+    if ($uc !== '' && is_numeric(substr($uc, 3, 3))) {
+      $commentOptions[$uc] = array('profile' => $up, 'count' => (int)$count);
+    }
+  }
+  ?>
   <div class="input-group-4 col-box-4">
-    <select style="padding:5px;" class="group-item group-item-r" id="comment" name="comment" onchange="location = './?hotspot=users&comment='+ this.value +'&session=<?= $session;?>';">
-    <?php
-    if ($comm != "") {
-    } else {
-      echo "<option value=''>".$_comment."</option>";
-    }
-    $TotalRegAll = count($allusers);
-    for ($i = 0; $i < $TotalRegAll; $i++) {
-      $ucomment = $allusers[$i]['comment'];
-      $uprofile = $allusers[$i]['profile'];
-      $acomment .= ",".$ucomment."#". $uprofile;
-    }
-
-    $ocomment=  explode(",",$acomment);
-    
-    $comments=array_count_values($ocomment) ;
-    foreach ($comments as $tcomment=>$value) {
-
-      if (is_numeric(substr($tcomment, 3, 3))) {
-       
-        echo "<option value='" . explode("#",$tcomment)[0] . "' >". explode("#",$tcomment)[0]." ".explode("#",$tcomment)[1]. " [".$value. "]</option>";
-       }
- 
-    }
-
-    ?>
+    <select style="padding:5px;" class="group-item group-item-r" id="comment" name="comment" onchange="var v=this.value; var u='<?= mikhmon_e($commentBaseUrl); ?>'; if(v){u += '&comment=' + encodeURIComponent(v);} window.location.assign(u);">
+      <option value="" <?= $comm === '' ? 'selected' : ''; ?>><?= $_comment; ?> — semua</option>
+      <?php foreach ($commentOptions as $uc => $opt): ?>
+        <option value="<?= mikhmon_e($uc); ?>" <?= $comm === $uc ? 'selected' : ''; ?>><?= mikhmon_e($uc . ' ' . $opt['profile'] . ' [' . $opt['count'] . ']'); ?></option>
+      <?php endforeach; ?>
+      <?php if ($comm !== '' && !isset($commentOptions[$comm])): ?>
+        <option value="<?= mikhmon_e($comm); ?>" selected><?= mikhmon_e($comm); ?></option>
+      <?php endif; ?>
     </select>
   </div>
   </div>
