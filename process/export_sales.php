@@ -41,6 +41,7 @@ if (!empty($_GET['month_key']) && preg_match('/^\d{4}-\d{2}$/', (string)$_GET['m
     $monthKey = \Mikhmon\Support\RecordParser::monthKeyFromBucket((string)$_GET['idbl']);
 }
 $q = isset($_GET['q']) ? trim((string)$_GET['q']) : '';
+$serverFilter = isset($_GET['server']) ? trim((string)$_GET['server']) : '';
 
 session_write_close();
 set_time_limit(0);
@@ -53,6 +54,7 @@ $filter = array(
     'date_to' => $dateKey,
     'month_key' => $dateKey !== null ? null : $monthKey,
     'q' => $q,
+    'server' => $serverFilter,
 );
 $st = $sales->exportStatement($session, $filter);
 
