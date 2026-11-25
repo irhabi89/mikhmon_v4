@@ -76,15 +76,22 @@ if (!isset($_SESSION["mikhmon"])) {
     $pn = isset($profileRow['name']) ? (string)$profileRow['name'] : '';
     if ($pn !== '') { $profileCounts[$pn] = 0; }
   }
+  // Counts in the profile dropdown must always describe the whole router,
+  // not only the currently filtered rows.
+  $profileCountSource = $getuser;
+  if ($prof !== 'all' || $comm != "" || $exp != "") {
+    $profileCountSource = $API->comm("/ip/hotspot/user/print");
+  }
+  $totalAllUsers = count($profileCountSource);
+  foreach ($profileCountSource as $userRow) {
+    $pn = isset($userRow['profile']) ? (string)$userRow['profile'] : '';
+    if ($pn !== '') { $profileCounts[$pn] = isset($profileCounts[$pn]) ? $profileCounts[$pn] + 1 : 1; }
+  }
 
   // Paginate only the rendered rows; comment aggregation still uses the full
   // list so the comment filter counts stay accurate.
   $allusers = $getuser;
   $totalUsers = count($allusers);
-  foreach ($allusers as $userRow) {
-    $pn = isset($userRow['profile']) ? (string)$userRow['profile'] : '';
-    if ($pn !== '') { $profileCounts[$pn] = isset($profileCounts[$pn]) ? $profileCounts[$pn] + 1 : 1; }
-  }
   $page = \Mikhmon\Support\Pagination::page(isset($_GET['page']) ? $_GET['page'] : 1);
   $perPage = \Mikhmon\Support\Pagination::perPage(isset($_GET['per_page']) ? $_GET['per_page'] : 50);
   $pages = \Mikhmon\Support\Pagination::pages($totalUsers, $perPage);
@@ -123,7 +130,7 @@ if (!isset($_SESSION["mikhmon"])) {
     <div class="input-group-4 col-box-4">
       <select style="padding:5px;" class="group-item group-item-m" onchange="if (this.value) { window.location.assign(this.value); }" title="Filter by Profile">
         <option value="" <?= empty($prof) ? 'selected' : ''; ?> disabled><?= $_profile ?> </option>
-        <option value="./?hotspot=users&amp;profile=all&amp;session=<?= urlencode((string)$session); ?>" <?= $prof === 'all' ? 'selected' : ''; ?>><?= $_show_all; ?> (<?= number_format($totalUsers, 0, ',', '.'); ?>)</option>
+        <option value="./?hotspot=users&amp;profile=all&amp;session=<?= urlencode((string)$session); ?>" <?= $prof === 'all' ? 'selected' : ''; ?>><?= $_show_all; ?> (<?= number_format($totalAllUsers, 0, ',', '.'); ?>)</option>
       <?php
       for ($i = 0; $i < $TotalReg2; $i++) {
         $profile = $getprofile[$i];
