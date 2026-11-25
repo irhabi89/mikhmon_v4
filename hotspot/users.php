@@ -76,11 +76,12 @@ if (!isset($_SESSION["mikhmon"])) {
     $pn = isset($profileRow['name']) ? (string)$profileRow['name'] : '';
     if ($pn !== '') { $profileCounts[$pn] = 0; }
   }
-  // Counts in the profile dropdown must always describe the whole router,
-  // not only the currently filtered rows.
+  // Count every profile from one unfiltered user list. This follows the
+  // /ip/hotspot/user/profile/print source used by the voucher-by-profile page
+  // but avoids one slow API round-trip per profile.
   $profileCountSource = $getuser;
   if ($prof !== 'all' || $comm != "" || $exp != "") {
-    $profileCountSource = $API->comm("/ip/hotspot/user/print");
+    $profileCountSource = $API->comm("/ip/hotspot/user/print", array('.proplist' => 'profile'));
   }
   $totalAllUsers = count($profileCountSource);
   foreach ($profileCountSource as $userRow) {
@@ -88,8 +89,6 @@ if (!isset($_SESSION["mikhmon"])) {
     if ($pn !== '') { $profileCounts[$pn] = isset($profileCounts[$pn]) ? $profileCounts[$pn] + 1 : 1; }
   }
 
-  // Paginate only the rendered rows; comment aggregation still uses the full
-  // list so the comment filter counts stay accurate.
   $allusers = $getuser;
   $totalUsers = count($allusers);
   $page = \Mikhmon\Support\Pagination::page(isset($_GET['page']) ? $_GET['page'] : 1);
@@ -130,14 +129,14 @@ if (!isset($_SESSION["mikhmon"])) {
     <div class="input-group-4 col-box-4">
       <select style="padding:5px;" class="group-item group-item-m" onchange="if (this.value) { window.location.assign(this.value); }" title="Filter by Profile">
         <option value="" <?= empty($prof) ? 'selected' : ''; ?> disabled><?= $_profile ?> </option>
-        <option value="./?hotspot=users&amp;profile=all&amp;session=<?= urlencode((string)$session); ?>" <?= $prof === 'all' ? 'selected' : ''; ?>><?= $_show_all; ?> (<?= number_format($totalAllUsers, 0, ',', '.'); ?>)</option>
+        <option value="./?hotspot=users&amp;profile=all&amp;session=<?= urlencode((string)$session); ?>" <?= $prof === 'all' ? 'selected' : ''; ?>><?= $_show_all; ?></option>
       <?php
       for ($i = 0; $i < $TotalReg2; $i++) {
         $profile = $getprofile[$i];
         $profileName = isset($profile['name']) ? (string)$profile['name'] : '';
         $profileUrl = './?hotspot=users&profile=' . rawurlencode($profileName) . '&session=' . rawurlencode((string)$session);
         $profileCount = isset($profileCounts[$profileName]) ? (int)$profileCounts[$profileName] : 0;
-        echo '<option value="' . mikhmon_e($profileUrl) . '"' . ($prof === $profileName ? ' selected' : '') . '>' . mikhmon_e($profileName) . ' (' . number_format($profileCount, 0, ',', '.') . ')</option>';
+        echo '<option value="' . mikhmon_e($profileUrl) . '"' . ($prof === $profileName ? ' selected' : '') . '>' . mikhmon_e($profileName) . '(' . number_format($profileCount, 0, ',', '.') . ')</option>';
       }
       ?>
     </select>
