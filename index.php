@@ -93,7 +93,7 @@ if (!isset($_SESSION["mikhmon"])) {
       'attempts' => 1,
       'delay' => 0,
       'timeout' => 2,
-      'read_timeout' => 8,
+      'read_timeout' => 60,
     ));
     if ($connected_api instanceof RouterosAPI) {
       $API = $connected_api;

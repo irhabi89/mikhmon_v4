@@ -24,67 +24,44 @@ if (!isset($_SESSION["mikhmon"])) {
   header("Location:../admin.php?id=login");
 } else {
 
-  if ($prof == "all") {
-    $getuser = $API->comm("/ip/hotspot/user/print");
-    $TotalReg = count($getuser);
-
-    $counttuser = $API->comm("/ip/hotspot/user/print", array(
-      "count-only" => ""
-    ));
-
-  } elseif ($prof != "all") {
-    $getuser = $API->comm("/ip/hotspot/user/print", array(
-      "?profile" => "$prof",
-    ));
-    $TotalReg = count($getuser);
-
-    $counttuser = $API->comm("/ip/hotspot/user/print", array(
-      "count-only" => "",
-      "?profile" => "$prof",
-    ));
-
-  }
-  if ($comm != "") {
-    $getuser = $API->comm("/ip/hotspot/user/print", array(
-      "?comment" => "$comm",
-    //"?uptime" => "00:00:00"
-    ));
-    $TotalReg = count($getuser);
-
-    $counttuser = $API->comm("/ip/hotspot/user/print", array(
-      "count-only" => "",
-      "?comment" => "$comm",
-    ));
-    
-  }
-  $exp = $_GET['exp'];
-  if ($exp != "") {
-    $getuser = $API->comm("/ip/hotspot/user/print", array(
-      "?limit-uptime" => "1s",
-    ));
-    
-    $counttuser = $API->comm("/ip/hotspot/user/print", array(
-      "count-only" => "",
-      "?limit-uptime" => "1s",
-    ));
-    
-  }
+  // Read profiles before the (possibly very large) user list. If a user-list
+  // read is slow the profile dropdown still has the correct source.
   $getprofile = $API->comm("/ip/hotspot/user/profile/print");
   $TotalReg2 = count($getprofile);
+
+  // Fetch the users once, then apply the profile/comment/expiry filters in
+  // PHP. This avoids a second slow API round-trip for profile counts and keeps
+  // the profile dropdown independent from whichever filter is active.
+  $allusersRaw = $API->comm("/ip/hotspot/user/print");
+  $getuser = $allusersRaw;
+  $prof = isset($prof) ? (string)$prof : '';
+  $comm = isset($comm) ? (string)$comm : '';
+  $exp = isset($_GET['exp']) ? (string)$_GET['exp'] : '';
+  if ($prof !== '' && $prof !== 'all') {
+    $getuser = array_values(array_filter($getuser, function ($userRow) use ($prof) {
+      return isset($userRow['profile']) && (string)$userRow['profile'] === $prof;
+    }));
+  }
+  if ($comm !== '') {
+    $getuser = array_values(array_filter($getuser, function ($userRow) use ($comm) {
+      return isset($userRow['comment']) && (string)$userRow['comment'] === $comm;
+    }));
+  }
+  if ($exp !== '') {
+    $getuser = array_values(array_filter($getuser, function ($userRow) {
+      return isset($userRow['limit-uptime']) && (string)$userRow['limit-uptime'] === '1s';
+    }));
+  }
+  $TotalReg = count($getuser);
+  $counttuser = $TotalReg;
+
   $profileCounts = array();
   foreach ($getprofile as $profileRow) {
     $pn = isset($profileRow['name']) ? (string)$profileRow['name'] : '';
     if ($pn !== '') { $profileCounts[$pn] = 0; }
   }
-  // Count every profile from one unfiltered user list. This follows the
-  // /ip/hotspot/user/profile/print source used by the voucher-by-profile page
-  // but avoids one slow API round-trip per profile.
-  $profileCountSource = $getuser;
-  if ($prof !== 'all' || $comm != "" || $exp != "") {
-    $profileCountSource = $API->comm("/ip/hotspot/user/print", array('.proplist' => 'profile'));
-  }
-  $totalAllUsers = count($profileCountSource);
-  foreach ($profileCountSource as $userRow) {
+  $totalAllUsers = count($allusersRaw);
+  foreach ($allusersRaw as $userRow) {
     $pn = isset($userRow['profile']) ? (string)$userRow['profile'] : '';
     if ($pn !== '') { $profileCounts[$pn] = isset($profileCounts[$pn]) ? $profileCounts[$pn] + 1 : 1; }
   }
