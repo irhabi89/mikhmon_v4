@@ -76,6 +76,8 @@ if ($livereport === 'disable') {
                   session: <?= json_encode((string)$session); ?>,
                   currency: <?= json_encode((string)$currency); ?>,
                   decimals: <?= (int)$decimals; ?>,
+                  today: <?= json_encode(date('Y-m-d')); ?>,
+                  month: <?= json_encode(date('Y-m')); ?>,
                   statusId: 'mmDashLiveStatus'
                 });
               })();

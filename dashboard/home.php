@@ -415,6 +415,8 @@ if (!isset($_SESSION["mikhmon"])) {
                             session: <?= json_encode((string)$session); ?>,
                             currency: <?= json_encode((string)$currency); ?>,
                             decimals: <?= (int)$price_decimals; ?>,
+                            today: <?= json_encode(date('Y-m-d')); ?>,
+                            month: <?= json_encode(date('Y-m')); ?>,
                             statusId: 'mmDashLiveStatus'
                           });
                         })();
