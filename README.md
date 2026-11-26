@@ -14,6 +14,18 @@ This branch: **feat/report-sqlite-ui**
 Version: **4.0.0** — updated 2026-11-26  
 License: **GPLv2** (original Mikhmon by Laksamadi Guko)
 
+## Quick start (cPanel / Linux)
+
+```bash
+git clone -b feat/report-sqlite-ui https://github.com/quiqxiq/mikhmon_v4.git mikhmon
+cd mikhmon
+bash setup.sh
+```
+
+Gunakan `--import-db /path/backup.db` untuk memindahkan data lama dan
+`--sync <session>` untuk sinkronisasi awal. Panduan lengkap:
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
+
 ## Fitur utama edisi ini
 
 - Laporan penjualan berbasis SQLite dengan filter tanggal, bulan, tahun,

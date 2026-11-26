@@ -28,7 +28,35 @@ composer --version
 
 Enable `pdo_sqlite`/`sqlite3` in **MultiPHP Manager → Extensions** if missing.
 
-## 2. Upload the code
+## 2. Quick setup (recommended)
+
+After cloning/uploading the project, run from the project root:
+
+```bash
+bash setup.sh
+```
+
+The script checks PHP/extensions, creates `data/` subdirectories, creates
+`.env` from `.env.example` if missing, installs Composer dependencies, runs
+the database migration with backup, and prints the next steps.
+
+Options:
+
+```bash
+# Import an existing clean SQLite backup
+bash setup.sh --import-db /home/USER/mikhmon-deploy.db
+
+# Also run an initial router sync
+bash setup.sh --sync livebarokah
+
+# Use a specific PHP CLI
+PHP_BIN=/usr/local/bin/php bash setup.sh
+```
+
+It does **not** overwrite an existing `.env`, and it backs up an existing
+database before importing a replacement.
+
+## 3. Upload the code
 
 Pick one branch:
 
@@ -50,7 +78,7 @@ Without Git: upload the branch ZIP via File Manager and extract to
 Do **not** upload the local `parto/` reference folder, `data/mikhmon.db`,
 `data/backups/`, `data/logs/`, or `.env`.
 
-## 3. Document root
+## 4. Document root
 
 Recommended: a subdomain such as `mikhmon.example.com` with document root:
 
@@ -69,7 +97,7 @@ and open `https://example.com/mikhmon/`.
 The root `.htaccess` protects `data/`, `src/`, `vendor/`, `tests/`,
 `migrations/`, `bin/`, and `resources/` from HTTP access.
 
-## 4. Install dependencies
+## 5. Install dependencies
 
 ```bash
 cd ~/mikhmon
@@ -85,7 +113,7 @@ php /tmp/composer-setup.php --install-dir=$HOME/bin --filename=composer
 ~/bin/composer install --no-dev --optimize-autoloader
 ```
 
-## 5. Configure `.env` (data inside project)
+## 6. Configure `.env` (data inside project)
 
 ```bash
 cd ~/mikhmon
@@ -113,7 +141,7 @@ chmod -R u+rwX data
 chmod 600 .env
 ```
 
-## 6. Import existing sales data (optional)
+## 7. Import existing sales data (optional)
 
 Create a clean backup locally; do not copy an open `-wal`/`-shm` pair:
 
@@ -133,7 +161,7 @@ chmod 640 mikhmon.db
 
 For a fresh install, skip this section.
 
-## 7. Migrate and verify
+## 8. Migrate and verify
 
 ```bash
 cd ~/mikhmon
@@ -150,7 +178,7 @@ php bin/mikhmon sync:run --session=livebarokah
 
 Backups are written to `data/backups/`.
 
-## 8. Web security check
+## 9. Web security check
 
 Open:
 
@@ -178,7 +206,7 @@ location ^~ /migrations/ { deny all; }
 location ~ /\.(?!well-known) { deny all; }
 ```
 
-## 9. Cron sync (recommended)
+## 10. Cron sync (recommended)
 
 Use cPanel → Cron Jobs, or `crontab -e`:
 
@@ -189,7 +217,7 @@ Use cPanel → Cron Jobs, or `crontab -e`:
 Use the same PHP binary as `MIKHMON_PHP_CLI`. If `exec` is disabled, the UI
 falls back to a web worker; cron is still more reliable for large archives.
 
-## 10. First login and hardening
+## 11. First login and hardening
 
 1. Open the domain/subdomain.
 2. Login with `mikhmon` / `1234`.
@@ -198,7 +226,7 @@ falls back to a web worker; cron is still more reliable for large archives.
 5. Confirm About shows `MIKHMON v4.0.0 — GHAIB-NETWORK Edition`.
 6. Enable HTTPS.
 
-## 11. Update procedure
+## 12. Update procedure
 
 ```bash
 cd ~/mikhmon
@@ -209,7 +237,7 @@ php bin/mikhmon db:migrate --backup
 
 Never overwrite `.env` or `data/mikhmon.db` during an update.
 
-## 12. Optional: data outside the document root
+## 13. Optional: data outside the document root
 
 ```bash
 mkdir -p /home/USER/mikhmon-data/{backups,cache,logs,locks}
