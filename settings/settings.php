@@ -96,10 +96,13 @@ if (!isset($_SESSION["mikhmon"])) {
 
     $sesname = (preg_replace('/\s+/', '-', $_POST['sessname']));
     $slivereport = ($_POST['livereport']);
-    $swebhookurl = isset($_POST['webhook_url']) ? trim((string)$_POST['webhook_url']) : '';
+    $existingWebhookRow = mikhmon_session_get((string)$session);
     $swebhooktoken = isset($_POST['webhook_token']) ? trim((string)$_POST['webhook_token']) : '';
-    if ($swebhooktoken === '') {
-      try { $swebhooktoken = bin2hex(random_bytes(16)); } catch (Throwable $e) { $swebhooktoken = ''; }
+    if ($swebhooktoken === '' && is_array($existingWebhookRow) && !empty($existingWebhookRow['webhook_token'])) {
+      $swebhooktoken = (string)$existingWebhookRow['webhook_token'];
+    }
+    if (!empty($_POST['regenerate_webhook_token']) || $swebhooktoken === '') {
+      try { $swebhooktoken = bin2hex(random_bytes(24)); } catch (Throwable $e) { $swebhooktoken = ''; }
     }
 
     
@@ -124,7 +127,6 @@ if (!isset($_SESSION["mikhmon"])) {
       'infolp' => $sinfolp,
       'idleto' => $sidleto,
       'live_report' => $slivereport,
-      'webhook_url' => $swebhookurl,
       'webhook_token' => $swebhooktoken,
     ));
     $_SESSION["connect"] = "";
@@ -144,8 +146,10 @@ if (!isset($_SESSION["mikhmon"])) {
 <?php
   $settings_form_name = 'settings';
   $webhookSessionRow = mikhmon_session_get((string)$session);
-  $webhook_url = is_array($webhookSessionRow) && isset($webhookSessionRow['webhook_url']) ? (string)$webhookSessionRow['webhook_url'] : '';
+  $webhookLegacyUrl = is_array($webhookSessionRow) && isset($webhookSessionRow['webhook_url']) ? (string)$webhookSessionRow['webhook_url'] : '';
+  $webhook_url = function_exists('mikhmon_webhook_url') ? mikhmon_webhook_url((string)$session, $webhookLegacyUrl) : '';
   $webhook_token = is_array($webhookSessionRow) && isset($webhookSessionRow['webhook_token']) ? (string)$webhookSessionRow['webhook_token'] : '';
+  $webhookBaseConfigured = function_exists('mikhmon_webhook_public_url') && mikhmon_webhook_public_url() !== '';
 ?>
 <script>
   function saveAndConnect(){
@@ -269,10 +273,10 @@ if (!isset($_SESSION["mikhmon"])) {
 	<td class="align-middle"><?= $_dns_name ?>  </td><td><input class="form-control" type="text" size="15" maxlength="500" name="dnsname" title="DNS Name [IP->Hotspot->Server Profiles->DNS Name]" value="<?= $dnsname; ?>" required="1"/></td>
 	</tr>
 	<tr>
-	<td class="align-middle">Webhook URL</td><td><input class="form-control" type="url" maxlength="500" name="webhook_url" placeholder="https://domain/process/sales_webhook.php" value="<?= htmlspecialchars((string)($webhook_url ?? ''), ENT_QUOTES, 'UTF-8'); ?>"/></td>
+	<td class="align-middle">Webhook URL</td><td><code><?= htmlspecialchars((string)($webhook_url ?? ''), ENT_QUOTES, 'UTF-8'); ?></code><br/><small class="mm-muted">Diambil dari <b>MIKHMON_PUBLIC_URL</b> di <code>.env</code>.</small><?php if (empty($webhookBaseConfigured) && empty($webhookLegacyUrl)): ?><br/><span class="text-red">MIKHMON_PUBLIC_URL belum diisi. Webhook tidak akan dipasang.</span><?php endif; ?></td>
 	</tr>
 	<tr>
-	<td class="align-middle">Webhook Token</td><td><input class="form-control" type="text" maxlength="128" name="webhook_token" value="<?= htmlspecialchars((string)($webhook_token ?? ''), ENT_QUOTES, 'UTF-8'); ?>"/><small class="mm-muted">Token untuk header X-Mikhmon-Token. Biarkan kosong untuk membuat baru.</small></td>
+	<td class="align-middle">Webhook Token</td><td><input class="form-control" type="text" maxlength="128" name="webhook_token" value="<?= htmlspecialchars((string)($webhook_token ?? ''), ENT_QUOTES, 'UTF-8'); ?>" autocomplete="off"/><small class="mm-muted">Token per session untuk header X-Mikhmon-Token.</small><br/><label style="font-weight:normal;margin-top:4px;display:block;"><input type="checkbox" name="regenerate_webhook_token" value="1"> Buat token baru (profile harus disimpan ulang)</label></td>
 	</tr>
 	<tr>
 	<td class="align-middle"><?= $_currency ?>  </td><td><input class="form-control" type="text" size="3" maxlength="4" name="currency" title="currency" value="<?= $currency; ?>" required="1"/></td>

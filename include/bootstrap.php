@@ -20,6 +20,7 @@ if (PHP_SAPI !== 'cli') {
     @ini_set('log_errors', '1');
 }
 \Mikhmon\Support\Config::load($mikhmon_base);
+require_once $mikhmon_base . '/lib/webhook.php';
 \Mikhmon\Support\Log::init();
 @date_default_timezone_set(\Mikhmon\Support\Config::timezone());
 

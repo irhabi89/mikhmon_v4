@@ -141,12 +141,13 @@ if (!isset($_SESSION["mikhmon"])) {
       $mode = "remove";
     }
 
-    $mmWebhookRow = function_exists('mikhmon_session_get') ? mikhmon_session_get((string)$session) : null;
-    $mmWebhookUrl = is_array($mmWebhookRow) && !empty($mmWebhookRow['webhook_url']) ? trim((string)$mmWebhookRow['webhook_url']) : '';
-    $mmWebhookToken = is_array($mmWebhookRow) && !empty($mmWebhookRow['webhook_token']) ? (string)$mmWebhookRow['webhook_token'] : '';
-    if ($mmWebhookUrl !== '' && strpos($mmWebhookUrl, 'session=') === false) {
-      $mmWebhookUrl .= (strpos($mmWebhookUrl, '?') === false ? '?' : '&') . 'session=' . rawurlencode((string)$session);
+    if (!function_exists('mikhmon_webhook_url')) {
+      require_once(__DIR__ . '/../lib/webhook.php');
     }
+    $mmWebhookRow = function_exists('mikhmon_session_get') ? mikhmon_session_get((string)$session) : null;
+    $mmWebhookLegacyUrl = is_array($mmWebhookRow) && !empty($mmWebhookRow['webhook_url']) ? trim((string)$mmWebhookRow['webhook_url']) : '';
+    $mmWebhookUrl = mikhmon_webhook_url((string)$session, $mmWebhookLegacyUrl);
+    $mmWebhookToken = $mmWebhookUrl !== '' ? mikhmon_webhook_token((string)$session, true) : '';
     $mmRosQuote = function ($value) {
       return str_replace(array('\\', '"', '$'), array('\\\\', '\\"', '\\$'), (string)$value);
     };

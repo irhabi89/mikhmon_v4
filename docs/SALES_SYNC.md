@@ -100,13 +100,32 @@ verification, only snapshot rows in state `imported` are deleted from
 `/system/script`. Each name is revalidated with `RecordParser::isSalesRecord`;
 non-sales scripts are never deleted. Invalid/pending records are left in place.
 
-## On-login webhook fallback
+## On-login webhook: URL and token sources
 
-Per-session settings can hold a webhook URL and token. On-login v3 tries
-`/tool fetch` to `process/sales_webhook.php`; regardless of webhook success, the
-script record is always written to `/system/script`. This guarantees a
-durable fallback if the webhook is unreachable or returns an error. The webhook
-is idempotent because `sales_records` has `UNIQUE(session, name)`.
+The webhook URL is application-wide and comes from `.env`:
+
+```dotenv
+MIKHMON_PUBLIC_URL=https://mikhmon.example.com
+```
+
+The generated endpoint is:
+
+```text
+https://mikhmon.example.com/process/sales_webhook.php?session=<session>
+```
+
+The URL must be publicly reachable from RouterOS. Do not point it at
+`localhost`, `127.0.0.1`, or a LAN-only address.
+
+The **token is per router session** and is stored in `mikhmon_sessions`.
+Settings shows the generated URL, the token, and a “Buat token baru” option.
+New tokens invalidate existing on-login snippets until the profile is saved
+again. The token is sent as `X-Mikhmon-Token`, never in the URL.
+
+On-login v3 tries `/tool fetch`; regardless of webhook success, the script
+record is always written to `/system/script`. If `MIKHMON_PUBLIC_URL` is empty,
+no webhook is embedded and the script fallback remains active. The webhook is
+idempotent because `sales_records` has `UNIQUE(session, name)`.
 
 Existing profiles must be re-saved (or upgraded) to receive the new webhook
 snippet; profiles without webhook still write the durable script record.

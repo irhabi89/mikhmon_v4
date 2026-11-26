@@ -8,6 +8,11 @@
  */
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
+if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+    http_response_code(405);
+    echo json_encode(array('ok' => false, 'error' => 'POST required'));
+    exit;
+}
 
 try {
     require_once(__DIR__ . '/../include/bootstrap.php');
@@ -21,9 +26,6 @@ try {
 
 $session = isset($_GET['session']) ? (string)$_GET['session'] : '';
 $token = isset($_SERVER['HTTP_X_MIKHMON_TOKEN']) ? (string)$_SERVER['HTTP_X_MIKHMON_TOKEN'] : '';
-if ($token === '' && isset($_GET['token'])) {
-    $token = (string)$_GET['token'];
-}
 if ($session === '' || preg_match('/^[A-Za-z0-9_.-]+$/', $session) !== 1) {
     http_response_code(400);
     echo json_encode(array('ok' => false, 'error' => 'session tidak valid'));
@@ -43,7 +45,7 @@ if ($expected === '' || $token === '' || !hash_equals($expected, $token)) {
     exit;
 }
 
-$record = file_get_contents('php://input');
+$record = file_get_contents('php://input', false, null, 0, 16384);
 if (!is_string($record) || trim($record) === '') {
     $record = isset($_POST['record']) ? (string)$_POST['record'] : '';
 }

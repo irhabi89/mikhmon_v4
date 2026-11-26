@@ -19,6 +19,7 @@ final class Config
     /** @var array<string,mixed> */
     private static $defaults = array(
         'MIKHMON_DB_PATH' => 'data/mikhmon.db',
+        'MIKHMON_PUBLIC_URL' => '',
         'MIKHMON_ROUTER_TRANSPORT' => 'native',
         'MIKHMON_SYNC_WORKER' => 'auto',
         'MIKHMON_SYNC_BATCH' => '500',
