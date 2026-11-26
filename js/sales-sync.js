@@ -78,6 +78,7 @@
     if (info) {
       var parts = [];
       parts.push("MikroTik: <b>" + (router.records != null ? fmt(router.records) : "?") + "</b> record");
+      if (Number(router.scanned_scripts || 0) > 0) { parts.push("Scan: <b>" + fmt(router.scanned_scripts) + "</b> script"); }
       parts.push("Database: <b>" + fmt(db.total) + "</b> transaksi");
       parts.push("Cocok: <b>" + fmt(db.matched) + "</b>");
       if (db.missing) { parts.push("<b class='text-red'>" + fmt(db.missing) + "</b> belum diimpor"); }
