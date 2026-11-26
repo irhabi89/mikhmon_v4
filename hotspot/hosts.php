@@ -107,5 +107,6 @@ for ($i = 0; $i < $TotalReg; $i++) {
 </tr>
 </div>
 </div>
+<script src="./js/mm-pagination.js"></script>
 <script src="./js/progressive-hotspot.js"></script>
 <script>MMProgressiveHotspot.start({type:"hosts",session:<?= json_encode((string)$session); ?>,bodyId:"hostBody",pagerId:"hostPager",countId:"hostCount",colspan:7});</script>

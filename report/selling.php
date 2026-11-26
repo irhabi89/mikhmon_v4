@@ -227,6 +227,7 @@ $actions = $syncButton
           <div id="mmLivePager" style="display:none;"></div>
           <p id="mmLiveEmpty" class="mm-muted" style="display:none;">Tidak ada record penjualan di MikroTik untuk filter ini.</p>
         </div>
+        <script src="./js/mm-pagination.js"></script>
         <script>
         (function () {
           var panel = document.getElementById('mmLiveSales');
@@ -253,22 +254,12 @@ $actions = $syncButton
           function renderPager() {
             if (!pager) { return; }
             if (!allRows.length) { pager.style.display = 'none'; pager.innerHTML = ''; return; }
-            var pages = Math.max(1, Math.ceil(allRows.length / perPage));
-            var from = ((page - 1) * perPage) + 1;
-            var to = Math.min(allRows.length, page * perPage);
-            pager.style.display = '';
-            var opts = [25, 50, 100, 200].map(function (size) {
-              return '<option value="' + size + '"' + (size === perPage ? ' selected' : '') + '>' + size + '</option>';
-            }).join('');
-            pager.innerHTML = '<div class="mm-pagination-wrap"><span class="mm-page-info">Menampilkan <b>' + from.toLocaleString('id-ID') + '–' + to.toLocaleString('id-ID') + '</b> dari <b>' + allRows.length.toLocaleString('id-ID') + '</b></span>' +
-              '<div class="mm-pagination-tools"><label class="mm-per-page">Baris <select data-per-page>' + opts + '</select></label>' +
-              '<nav class="mm-pagination"><button type="button" class="mm-page-btn" data-page="' + (page - 1) + '"' + (page <= 1 ? ' disabled' : '') + '>&laquo;</button>' +
-              '<span class="mm-page-info">Halaman ' + page + ' / ' + pages + '</span>' +
-              '<button type="button" class="mm-page-btn" data-page="' + (page + 1) + '"' + (page >= pages ? ' disabled' : '') + '>&raquo;</button></nav></div></div>';
-            var sel = pager.querySelector('[data-per-page]');
-            if (sel) { sel.onchange = function () { perPage = Number(sel.value) || 50; page = 1; renderPage(); }; }
-            pager.querySelectorAll('button[data-page]').forEach(function (btn) {
-              btn.onclick = function () { var next = Number(btn.getAttribute('data-page')); if (next >= 1 && next <= pages) { page = next; renderPage(); } };
+            MMPagination.mount(pager, {
+              total: allRows.length,
+              page: page,
+              perPage: perPage,
+              onPage: function (next) { page = next; renderPage(); },
+              onPerPage: function (size) { perPage = size; page = 1; renderPage(); }
             });
           }
           function updateKpis() {

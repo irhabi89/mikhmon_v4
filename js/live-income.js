@@ -26,9 +26,13 @@
     var todayCount = 0, monthCount = 0, totalCount = 0;
     var todaySum = 0, monthSum = 0, totalSum = 0;
     var timer = 0;
-    function status(html) {
-      var el = document.getElementById(opts.statusId || 'mmDashLiveStatus');
-      if (el) { el.innerHTML = html; }
+    function showError(message) {
+      var el = document.getElementById('mmDashLiveError');
+      if (el) { el.textContent = message; el.style.display = ''; }
+    }
+    function clearError() {
+      var el = document.getElementById('mmDashLiveError');
+      if (el) { el.style.display = 'none'; el.textContent = ''; }
     }
     function render() {
       timer = 0;
@@ -38,6 +42,7 @@
       set('mmDashMonthCount', monthCount.toLocaleString('id-ID'));
       var vals = document.getElementById('mmDashLiveValues');
       if (vals) { vals.style.display = ''; }
+      clearError();
     }
     function schedule() {
       if (timer) { return; }
@@ -67,16 +72,8 @@
                 if (String(event.data.date_key || '').slice(0, 7) === month) { monthCount++; monthSum += price; }
                 schedule();
               }
-              if (event.type === 'progress') {
-                status('<i class="fa fa-circle-o-notch fa-spin"></i> Membaca ' + Number(event.rows || 0).toLocaleString('id-ID') + ' record…');
-              }
-              if (event.type === 'done') {
-                render();
-                status('<b>Data live MikroTik</b> · ' + totalCount.toLocaleString('id-ID') + ' record — belum diimpor');
-              }
-              if (event.type === 'error') {
-                status('<span class="text-red">Data live gagal dimuat: ' + String(event.error || '') + '</span>');
-              }
+              if (event.type === 'done') { render(); }
+              if (event.type === 'error') { showError('Data live gagal dimuat: ' + String(event.error || '')); }
             });
             return pump();
           });
@@ -85,7 +82,7 @@
       })
       .catch(function (err) {
         if (err && err.name === 'AbortError') { return; }
-        status('<span class="text-red">Data live gagal dimuat: ' + String(err.message) + '</span>');
+        showError('Data live gagal dimuat: ' + String(err.message));
       });
   }
 

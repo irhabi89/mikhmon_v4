@@ -84,5 +84,6 @@ for ($i = 0; $i < $TotalReg; $i++) {
 </div>
 </div>
 </div>
+<script src="./js/mm-pagination.js"></script>
 <script src="./js/progressive-hotspot.js"></script>
 <script>MMProgressiveHotspot.start({type:"cookies",session:<?= json_encode((string)$session); ?>,bodyId:"cookieBody",pagerId:"cookiePager",countId:"cookieCount",colspan:5});</script>

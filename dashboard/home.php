@@ -406,18 +406,16 @@ if (!isset($_SESSION["mikhmon"])) {
                         (function () {
                           var box = document.getElementById('reloadLreport');
                           if (!box || !window.MMLiveIncome) { return; }
-                          box.innerHTML = '<span class="mm-muted" id="mmDashLiveStatus"><i class="fa fa-circle-o-notch fa-spin"></i> Membaca data live dari MikroTik…</span>' +
-                            '<div id="mmDashLiveValues" style="display:none;">' +
-                            <?= json_encode((string)$_today); ?> + ' : <b id="mmDashTodayValue">-</b> <small class="mm-muted">(<span id="mmDashTodayCount">0</span> voucher)</small><br>' +
-                            <?= json_encode((string)$_this_month); ?> + ' : <b id="mmDashMonthValue">-</b> <small class="mm-muted">(<span id="mmDashMonthCount">0</span> voucher)</small><br>' +
-                            '<small class="mm-muted">Data live MikroTik — belum diimpor</small></div>';
+                          box.innerHTML = '<div id="mmDashLiveValues">' +
+                            <?= json_encode((string)$_today); ?> + ' : <b id="mmDashTodayValue">-</b> <small class="mm-muted">(<span id="mmDashTodayCount">-</span> voucher)</small><br>' +
+                            <?= json_encode((string)$_this_month); ?> + ' : <b id="mmDashMonthValue">-</b> <small class="mm-muted">(<span id="mmDashMonthCount">-</span> voucher)</small></div>' +
+                            '<span id="mmDashLiveError" class="text-red" style="display:none;"></span>';
                           MMLiveIncome.start({
                             session: <?= json_encode((string)$session); ?>,
                             currency: <?= json_encode((string)$currency); ?>,
                             decimals: <?= (int)$price_decimals; ?>,
                             today: <?= json_encode(date('Y-m-d')); ?>,
                             month: <?= json_encode(date('Y-m')); ?>,
-                            statusId: 'mmDashLiveStatus'
                           });
                         })();
                         </script>

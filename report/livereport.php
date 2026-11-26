@@ -60,14 +60,13 @@ if ($livereport === 'disable') {
               <b><?= $_income ?? 'Income'; ?></b><br><span class="mm-muted">Live report dinonaktifkan.</span>
             <?php elseif (!empty($empty)): ?>
               <b><?= $_income ?? 'Income'; ?></b><br>
-              <span class="mm-muted" id="mmDashLiveStatus"><i class="fa fa-circle-o-notch fa-spin"></i> Membaca data live dari MikroTik…</span>
-              <div id="mmDashLiveValues" style="display:none;">
+              <div id="mmDashLiveValues">
                 <span><?= $_today ?? 'Hari ini'; ?> : <b id="mmDashTodayValue">-</b></span>
-                <small class="mm-muted">(<span id="mmDashTodayCount">0</span> voucher)</small><br>
+                <small class="mm-muted">(<span id="mmDashTodayCount">-</span> voucher)</small><br>
                 <span><?= $_this_month ?? 'Bulan ini'; ?> : <b id="mmDashMonthValue">-</b></span>
-                <small class="mm-muted">(<span id="mmDashMonthCount">0</span> voucher)</small><br>
-                <small class="mm-muted">Data live MikroTik — belum diimpor</small>
+                <small class="mm-muted">(<span id="mmDashMonthCount">-</span> voucher)</small>
               </div>
+              <span id="mmDashLiveError" class="text-red" style="display:none;"></span>
               <script src="./js/live-income.js"></script>
               <script>
               (function () {
@@ -78,7 +77,6 @@ if ($livereport === 'disable') {
                   decimals: <?= (int)$decimals; ?>,
                   today: <?= json_encode(date('Y-m-d')); ?>,
                   month: <?= json_encode(date('Y-m')); ?>,
-                  statusId: 'mmDashLiveStatus'
                 });
               })();
               </script>

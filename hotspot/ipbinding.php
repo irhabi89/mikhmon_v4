@@ -125,5 +125,6 @@ for ($i = 0; $i < $TotalReg; $i++) {
 </div>
 </div>
 </div>
+<script src="./js/mm-pagination.js"></script>
 <script src="./js/progressive-hotspot.js"></script>
 <script>MMProgressiveHotspot.start({type:"ipbinding",session:<?= json_encode((string)$session); ?>,bodyId:"bindingBody",pagerId:"bindingPager",countId:"bindingCount",colspan:7});</script>
