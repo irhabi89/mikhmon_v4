@@ -110,3 +110,11 @@ is idempotent because `sales_records` has `UNIQUE(session, name)`.
 
 Existing profiles must be re-saved (or upgraded) to receive the new webhook
 snippet; profiles without webhook still write the durable script record.
+
+## Progressive user list
+
+The default "all users" page now sends its HTML shell first and streams rows from
+`process/live_users.php` in NDJSON batches. Pagination, profile counts and
+comment options are built in the browser after the scan completes. Other
+filtered views keep the existing cached server-side path. This is read-only and
+never starts a sync job.

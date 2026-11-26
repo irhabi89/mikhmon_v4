@@ -329,3 +329,11 @@ body.mm-theme-blue { --mm-primary: #20a8d8; }
   .mm-table-wrap { border: none; overflow: visible; max-height: none; }
   .mm-table thead th { position: static; }
 }
+
+.mm-progress.is-indeterminate > span {
+  animation: mm-progress-slide 1.2s ease-in-out infinite;
+}
+@keyframes mm-progress-slide {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(320%); }
+}

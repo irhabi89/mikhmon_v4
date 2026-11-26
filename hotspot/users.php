@@ -24,18 +24,30 @@ if (!isset($_SESSION["mikhmon"])) {
   header("Location:../admin.php?id=login");
 } else {
 
-  // Read profiles before the (possibly very large) user list. If a user-list
-  // read is slow the profile dropdown still has the correct source.
-  $profileRead = mikhmon_router_cached($API, $session, '/ip/hotspot/user/profile/print', array(), 60);
-  $getprofile = (array)$profileRead['data'];
-  $TotalReg2 = count($getprofile);
+  // Decide progressive mode before touching the router. The default "all
+  // users" view must send its shell immediately; profile names/counts arrive
+  // through the streaming endpoint.
+  $prof = isset($prof) ? (string)$prof : '';
+  $comm = isset($comm) ? (string)$comm : '';
+  $exp = isset($_GET['exp']) ? (string)$_GET['exp'] : '';
+  $progressiveUsers = ($prof === 'all' && $comm === '' && $exp === '' && !isset($_GET['page']) && !isset($_GET['per_page']));
+
+  if ($progressiveUsers) {
+    $getprofile = array();
+    $TotalReg2 = 0;
+  } else {
+    // Read profiles before the (possibly very large) user list.
+    $profileRead = mikhmon_router_cached($API, $session, '/ip/hotspot/user/profile/print', array(), 60);
+    $getprofile = (array)$profileRead['data'];
+    $TotalReg2 = count($getprofile);
+  }
 
   // Fetch only the rows needed for the active filter. The profile-only
   // count source is cached separately, so filtering never downloads the full
   // detailed list just to populate the profile dropdown.
-  $prof = isset($prof) ? (string)$prof : '';
-  $comm = isset($comm) ? (string)$comm : '';
-  $exp = isset($_GET['exp']) ? (string)$_GET['exp'] : '';
+  $usersCached = false;
+  $usersCacheTime = 0;
+  if (!$progressiveUsers) {
   $userFields = '.id,server,name,password,profile,mac-address,uptime,bytes-in,bytes-out,comment,disabled,limit-uptime,limit-bytes-total';
   $userParams = array('.proplist' => $userFields);
   if ($prof !== '' && $prof !== 'all') { $userParams['?profile'] = $prof; }
@@ -69,15 +81,33 @@ if (!isset($_SESSION["mikhmon"])) {
     $profileCountRead = mikhmon_router_cached($API, $session, '/ip/hotspot/user/print', array('.proplist' => 'profile'), 60);
     $profileCountSource = (array)$profileCountRead['data'];
   }
+  } else {
+    $allusersRaw = array();
+    $getuser = array();
+    $usersCached = false;
+    $usersCacheTime = 0;
+    $TotalReg = 0;
+    $counttuser = 0;
+  }
+
   $profileCounts = array();
   foreach ($getprofile as $profileRow) {
     $pn = isset($profileRow['name']) ? (string)$profileRow['name'] : '';
     if ($pn !== '') { $profileCounts[$pn] = 0; }
   }
-  $totalAllUsers = count($profileCountSource);
-  foreach ($profileCountSource as $userRow) {
-    $pn = isset($userRow['profile']) ? (string)$userRow['profile'] : '';
-    if ($pn !== '') { $profileCounts[$pn] = isset($profileCounts[$pn]) ? $profileCounts[$pn] + 1 : 1; }
+  if (!$progressiveUsers) {
+    $profileCountSource = $allusersRaw;
+    if ($prof !== '' || $comm !== '' || $exp !== '') {
+      $profileCountRead = mikhmon_router_cached($API, $session, '/ip/hotspot/user/print', array('.proplist' => 'profile'), 60);
+      $profileCountSource = (array)$profileCountRead['data'];
+    }
+    $totalAllUsers = count($profileCountSource);
+    foreach ($profileCountSource as $userRow) {
+      $pn = isset($userRow['profile']) ? (string)$userRow['profile'] : '';
+      if ($pn !== '') { $profileCounts[$pn] = isset($profileCounts[$pn]) ? $profileCounts[$pn] + 1 : 1; }
+    }
+  } else {
+    $totalAllUsers = 0;
   }
 
   $allusers = $getuser;
@@ -99,7 +129,7 @@ if (!isset($_SESSION["mikhmon"])) {
     <h3><i class="fa fa-users"></i> <?= $_users ?>
       <span style="font-size: 14px">
         <?php
-        if ($counttuser == 0) {
+        if ($counttuser == 0 && empty($progressiveUsers)) {
           echo "<script>window.location='./?hotspot=users&profile=all&session=" . $session . "</script>";
         } ?>
          &nbsp; | &nbsp; <a href="./?hotspot-user=add&session=<?= $session; ?>" title="Add User"><i class="fa fa-user-plus"></i> <?= $_add ?></a>
@@ -208,7 +238,7 @@ if (!isset($_SESSION["mikhmon"])) {
     <th class="pointer" title="Click to sort"><i class="fa fa-sort"></i> <?= $_comment ?></th>
     </tr>
   </thead>
-  <tbody id="tbody">
+  <tbody id="mmUsersBody">
 <?php
 for ($i = 0; $i < $TotalReg; $i++) {
   $userdetails = $getuser[$i];
@@ -281,10 +311,68 @@ for ($i = 0; $i < $TotalReg; $i++) {
   </tbody>
 </table>
 </div>
-<div class="mm-pagination-wrap">
+<div class="mm-pagination-wrap" id="mmUsersPager">
   <?= mikhmon_pager($totalUsers, $page, $perPage, $baseUrl); ?>
   <span class="mm-per-page"><?= mikhmon_per_page($perPage, $baseUrl); ?></span>
 </div>
+<script>
+(function () {
+  var progressive = <?= !empty($progressiveUsers) ? 'true' : 'false'; ?>;
+  if (!progressive) { return; }
+  var body = document.getElementById('mmUsersBody');
+  var pager = document.getElementById('mmUsersPager');
+  var countEl = document.getElementById('cuser');
+  var loader = document.getElementById('loader');
+  if (!body) { return; }
+  var rows = [];
+  var page = 1;
+  var perPage = 50;
+  var pending = 0;
+  var comments = {};
+  body.innerHTML = '<tr id="mmUsersLoading"><td colspan="10" class="mm-muted"><i class="fa fa-circle-o-notch fa-spin"></i> Memuat data pengguna dari MikroTik...</td></tr>';
+  function textCell(value) { var td = document.createElement('td'); td.textContent = value == null ? '' : String(value); return td; }
+  function addLink(td, href, icon, title, onclick) {
+    var a = document.createElement('a'); a.href = href || '#'; a.title = title || ''; if (onclick) { a.setAttribute('onclick', onclick); }
+    var i = document.createElement('i'); i.className = icon; a.appendChild(i); td.appendChild(a); return a;
+  }
+  var config = <?= json_encode(array('session' => (string)$session, 'currency' => (string)$currency), JSON_UNESCAPED_SLASHES); ?>;
+  function renderPage() {
+    body.innerHTML = '';
+    var start = (page - 1) * perPage;
+    var end = Math.min(rows.length, start + perPage);
+    for (var i = start; i < end; i++) {
+      var r = rows[i], tr = document.createElement('tr'), td;
+      td = document.createElement('td'); td.style.textAlign = 'center';
+      addLink(td, './?remove-hotspot-user=' + encodeURIComponent(r.id) + '&session=' + encodeURIComponent(config.session), 'fa fa-minus-square text-danger', 'Remove ' + r.name, "return confirm('Hapus user " + String(r.name).replace(/'/g, "\\'") + "?')");
+      td.appendChild(document.createTextNode(' '));
+      var disabled = String(r.disabled) === 'true';
+      addLink(td, './?' + (disabled ? 'enable' : 'disable') + '-hotspot-user=' + encodeURIComponent(r.id) + '&session=' + encodeURIComponent(config.session), disabled ? 'fa fa-lock text-warning' : 'fa fa-unlock', (disabled ? 'Enable ' : 'Disable ') + r.name);
+      tr.appendChild(td);
+      tr.appendChild(textCell(r.server));
+      td = document.createElement('td'); var edit = document.createElement('a'); edit.href = './?hotspot-user=' + encodeURIComponent(r.id) + '&session=' + encodeURIComponent(config.session); edit.title = 'Open User ' + r.name; edit.innerHTML = '<i class="fa fa-edit"></i> '; edit.appendChild(document.createTextNode(r.name)); td.appendChild(edit); tr.appendChild(td);
+      td = document.createElement('td'); var mode = r.user_mode || 'up'; addLink(td, './voucher/print.php?user=' + encodeURIComponent(mode + '-' + r.name) + '&qr=no&session=' + encodeURIComponent(config.session), 'fa fa-print', 'Print'); td.appendChild(document.createTextNode(' ')); addLink(td, './voucher/print.php?user=' + encodeURIComponent(mode + '-' + r.name) + '&qr=yes&session=' + encodeURIComponent(config.session), 'fa fa-qrcode', 'Print QR'); tr.appendChild(td);
+      tr.appendChild(textCell(r.profile)); tr.appendChild(textCell(r.mac)); tr.appendChild(textCell(r.uptime)); tr.appendChild(textCell(r.bytes_in)); tr.appendChild(textCell(r.bytes_out));
+      td = document.createElement('td'); var comment = String(r.comment || '');
+      if (comment.indexOf('vc-') === 0 || comment.indexOf('up-') === 0) {
+        var ca = document.createElement('a'); ca.href = './?hotspot=users&comment=' + encodeURIComponent(comment) + '&session=' + encodeURIComponent(config.session); ca.title = 'Filter by ' + comment; ca.innerHTML = '<i class="fa fa-search"></i> '; ca.appendChild(document.createTextNode(comment + (r.limit_data || '') + (r.limit_uptime || ''))); td.appendChild(ca);
+      } else { td.textContent = comment + (r.limit_data || '') + (r.limit_uptime || ''); }
+      tr.appendChild(td); body.appendChild(tr);
+    }
+    if (countEl) { countEl.textContent = rows.length.toLocaleString('id-ID'); }
+    if (loader) { loader.style.display = 'none'; }
+    if (pager) {
+      var pages = Math.max(1, Math.ceil(rows.length / perPage));
+      pager.innerHTML = pages > 1 ? '<button type="button" class="mm-page-btn" data-page="' + (page - 1) + '"' + (page <= 1 ? ' disabled' : '') + '>&laquo;</button><span class="mm-page-current">Halaman ' + page + ' / ' + pages + '</span><button type="button" class="mm-page-btn" data-page="' + (page + 1) + '"' + (page >= pages ? ' disabled' : '') + '>&raquo;</button><span class="mm-muted">' + rows.length.toLocaleString('id-ID') + ' user</span>' : '';
+      pager.querySelectorAll('button[data-page]').forEach(function (btn) { btn.onclick = function () { var n = Number(btn.getAttribute('data-page')); if (n >= 1 && n <= pages) { page = n; renderPage(); } }; });
+    }
+  }
+  function schedule() { if (pending) { return; } pending = setTimeout(function () { pending = 0; renderPage(); }, 150); }
+  fetch('./process/live_users.php?' + location.search.replace(/^\?/, ''), {credentials: 'same-origin', headers: {'Accept': 'application/x-ndjson'}})
+    .then(function (res) { if (!res.ok || !res.body) { throw new Error('HTTP ' + res.status); } var reader = res.body.getReader(), decoder = new TextDecoder(), buf = '';
+      function pump() { return reader.read().then(function (part) { if (part.done) { return; } buf += decoder.decode(part.value, {stream: true}); var lines = buf.split('\n'); buf = lines.pop(); lines.forEach(function (line) { if (!line.trim()) { return; } var e; try { e = JSON.parse(line); } catch (x) { return; } if (e.type === 'row') { rows.push(e.data); var c = String(e.data.comment || ''); if (c.indexOf('vc-') === 0 || c.indexOf('up-') === 0) { var ck = c + '\u0000' + String(e.data.profile || ''); comments[ck] = (comments[ck] || 0) + 1; } schedule(); } if (e.type === 'profiles') { var sel = document.querySelector('select[title="Filter by Profile"]'); Object.keys(e.data || {}).forEach(function (name) { var opt = document.querySelector('option[data-profile-name="' + String(name).replace(/"/g, '\\"') + '"]'); if (!opt && sel) { opt = document.createElement('option'); opt.value = './?hotspot=users&profile=' + encodeURIComponent(name) + '&session=' + encodeURIComponent(config.session); opt.setAttribute('data-profile-name', name); sel.appendChild(opt); } if (opt) { opt.textContent = name + '(' + Number(e.data[name]).toLocaleString('id-ID') + ')'; } }); } if (e.type === 'done') { if (loader) { loader.style.display = 'none'; } if (e.rows === 0) { body.innerHTML = '<tr><td colspan="10" class="mm-muted">Tidak ada user.</td></tr>'; } var cs = document.getElementById('comment'); if (cs) { while (cs.options.length > 1) { cs.remove(1); } Object.keys(comments).forEach(function (k) { var parts = k.split('\u0000'); var o = document.createElement('option'); o.value = parts[0]; o.textContent = parts[0] + ' ' + parts[1] + ' [' + comments[k] + ']'; cs.appendChild(o); }); } renderPage(); } if (e.type === 'error') { body.innerHTML = '<tr><td colspan="10" class="text-red">Gagal memuat user: ' + String(e.error) + '</td></tr>'; } }); return pump(); }); } return pump(); })
+    .catch(function (err) { body.innerHTML = '<tr><td colspan="10" class="text-red">Gagal memuat user: ' + String(err.message) + '</td></tr>'; });
+})();
+</script>
 </div>
 </div>
 </div>

@@ -119,8 +119,8 @@ $actions = $syncButton
       <div class="mm-kpi-icon bg-primary"><i class="fa fa-money"></i></div>
       <div class="mm-kpi-body">
         <div class="mm-kpi-label">Bulan Ini</div>
-        <div class="mm-kpi-value"><?= mikhmon_e($fmt($stats['month_sum'])); ?></div>
-        <div class="mm-kpi-note">
+        <div class="mm-kpi-value" id="mmKpiMonthValue"><?= mikhmon_e($fmt($stats['month_sum'])); ?></div>
+        <div class="mm-kpi-note" id="mmKpiMonthNote">
           <span class="<?= $delta >= 0 ? 'text-green' : 'text-red'; ?>"><i class="fa fa-arrow-<?= $delta >= 0 ? 'up' : 'down'; ?>"></i> <?= number_format(abs($deltaPct), 1, ',', '.'); ?>%</span>
           (<?= ($delta >= 0 ? '+' : '-') . mikhmon_e($fmt(abs($delta))); ?>) dari bulan lalu
         </div>
@@ -130,24 +130,24 @@ $actions = $syncButton
       <div class="mm-kpi-icon bg-green"><i class="fa fa-calendar-check-o"></i></div>
       <div class="mm-kpi-body">
         <div class="mm-kpi-label">Hari Ini</div>
-        <div class="mm-kpi-value"><?= mikhmon_e($fmt($stats['today_sum'])); ?></div>
-        <div class="mm-kpi-note"><?= number_format($stats['today_count'], 0, ',', '.'); ?> voucher terjual</div>
+        <div class="mm-kpi-value" id="mmKpiTodayValue"><?= mikhmon_e($fmt($stats['today_sum'])); ?></div>
+        <div class="mm-kpi-note" id="mmKpiTodayNote"><?= number_format($stats['today_count'], 0, ',', '.'); ?> voucher terjual</div>
       </div>
     </div>
     <div class="mm-kpi">
       <div class="mm-kpi-icon bg-indigo"><i class="fa fa-ticket"></i></div>
       <div class="mm-kpi-body">
         <div class="mm-kpi-label">Voucher Keseluruhan</div>
-        <div class="mm-kpi-value"><?= number_format($stats['total_count'], 0, ',', '.'); ?></div>
-        <div class="mm-kpi-note">total voucher tercatat</div>
+        <div class="mm-kpi-value" id="mmKpiTotalCount"><?= number_format($stats['total_count'], 0, ',', '.'); ?></div>
+        <div class="mm-kpi-note" id="mmKpiTotalNote">total voucher tercatat</div>
       </div>
     </div>
     <div class="mm-kpi">
       <div class="mm-kpi-icon bg-blue"><i class="fa fa-database"></i></div>
       <div class="mm-kpi-body">
         <div class="mm-kpi-label">Nominal Keseluruhan</div>
-        <div class="mm-kpi-value"><?= mikhmon_e($fmt($stats['total_sum'])); ?></div>
-        <div class="mm-kpi-note">total penjualan tercatat</div>
+        <div class="mm-kpi-value" id="mmKpiTotalSum"><?= mikhmon_e($fmt($stats['total_sum'])); ?></div>
+        <div class="mm-kpi-note" id="mmKpiTotalSumNote">total penjualan tercatat</div>
       </div>
     </div>
   </div>
@@ -156,7 +156,7 @@ $actions = $syncButton
     <div class="mm-card-head">
       <h2><i class="fa fa-list"></i> <?= mikhmon_e($periodLabel); ?></h2>
       <div class="mm-page-actions">
-        <span class="mm-muted">Total: <b><?= number_format($filterTotal, 0, ',', '.'); ?></b> transaksi · <b><?= mikhmon_e($fmt($filterSum)); ?></b></span>
+        <span class="mm-muted" id="mmReportTotal">Total: <b><?= number_format($filterTotal, 0, ',', '.'); ?></b> transaksi · <b><?= mikhmon_e($fmt($filterSum)); ?></b></span>
       </div>
     </div>
     <div class="mm-card-body">
@@ -226,6 +226,7 @@ $actions = $syncButton
               <tbody id="mmLiveBody"></tbody>
             </table>
           </div>
+          <div id="mmLivePager" class="mm-pagination-wrap" style="display:none;"></div>
           <p id="mmLiveEmpty" class="mm-muted" style="display:none;">Tidak ada record penjualan di MikroTik untuk filter ini.</p>
         </div>
         <script>
@@ -238,21 +239,73 @@ $actions = $syncButton
           var wrap = document.getElementById('mmLiveWrap');
           var empty = document.getElementById('mmLiveEmpty');
           var stop = document.getElementById('mmLiveStop');
+          var pager = document.getElementById('mmLivePager');
           var controller = new AbortController();
-          var rows = 0;
-          var url = './process/live_sales.php?' + location.search.replace(/^\?/, '');
+          var allRows = [];
+          var page = 1;
+          var perPage = 50;
+          var pendingRender = 0;
+          var serverToday = <?= json_encode(date('Y-m-d')); ?>;
+          var serverMonth = <?= json_encode(date('Y-m')); ?>;
+          var currency = <?= json_encode((string)$currency); ?>;
+          var decimals = <?= (int)$decimals; ?>;
+          function money(value) {
+            return currency + ' ' + Number(value || 0).toLocaleString('id-ID', {maximumFractionDigits: decimals});
+          }
           function setInfo(text) { if (info) { info.textContent = text; } }
-          function append(row) {
-            rows++;
-            if (wrap) { wrap.style.display = ''; }
-            if (empty) { empty.style.display = 'none'; }
-            var tr = document.createElement('tr');
-            [String(rows), row.date_key, row.time_key, row.server_name, row.username, row.profile, row.sale_comment, 'Rp ' + Number(row.price || 0).toLocaleString('id-ID')].forEach(function (value) {
-              var td = document.createElement('td'); td.textContent = value || ''; tr.appendChild(td);
+          function renderPager() {
+            if (!pager) { return; }
+            var pages = Math.max(1, Math.ceil(allRows.length / perPage));
+            if (pages <= 1) { pager.style.display = 'none'; pager.innerHTML = ''; return; }
+            pager.style.display = '';
+            pager.innerHTML = '<button type="button" class="mm-page-btn" data-page="' + (page - 1) + '"' + (page <= 1 ? ' disabled' : '') + '>&laquo;</button>' +
+              '<span class="mm-page-current">Halaman ' + page + ' / ' + pages + '</span>' +
+              '<button type="button" class="mm-page-btn" data-page="' + (page + 1) + '"' + (page >= pages ? ' disabled' : '') + '>&raquo;</button>' +
+              '<span class="mm-muted">' + allRows.length.toLocaleString('id-ID') + ' record</span>';
+            pager.querySelectorAll('button[data-page]').forEach(function (btn) {
+              btn.onclick = function () { var next = Number(btn.getAttribute('data-page')); if (next >= 1 && next <= pages) { page = next; renderPage(); } };
             });
-            body.appendChild(tr);
+          }
+          function updateKpis() {
+            var total = 0, today = 0, month = 0, totalCount = allRows.length;
+            var todayCount = 0, monthCount = 0;
+            allRows.forEach(function (row) {
+              var price = Number(row.price || 0); total += price;
+              if (row.date_key === serverToday) { today += price; todayCount++; }
+              if (String(row.date_key || '').slice(0, 7) === serverMonth) { month += price; monthCount++; }
+            });
+            var set = function (id, value) { var el = document.getElementById(id); if (el) { el.textContent = value; } };
+            set('mmKpiMonthValue', money(month)); set('mmKpiMonthNote', monthCount.toLocaleString('id-ID') + ' voucher (live)');
+            set('mmKpiTodayValue', money(today)); set('mmKpiTodayNote', todayCount.toLocaleString('id-ID') + ' voucher terjual (live)');
+            set('mmKpiTotalCount', totalCount.toLocaleString('id-ID')); set('mmKpiTotalNote', 'total voucher (live)');
+            set('mmKpiTotalSum', money(total)); set('mmKpiTotalSumNote', 'total penjualan (live)');
+            var totalEl = document.getElementById('mmReportTotal');
+            if (totalEl) { totalEl.innerHTML = 'Total: <b>' + totalCount.toLocaleString('id-ID') + '</b> transaksi · <b>' + money(total) + '</b>'; }
+          }
+          function renderPage() {
+            if (!body) { return; }
+            body.innerHTML = '';
+            var start = (page - 1) * perPage;
+            var end = Math.min(allRows.length, start + perPage);
+            for (var i = start; i < end; i++) {
+              var row = allRows[i];
+              var tr = document.createElement('tr');
+              [String(i + 1), row.date_key, row.time_key, row.server_name, row.username, row.profile, row.sale_comment, money(row.price)].forEach(function (value) {
+                var td = document.createElement('td'); td.textContent = value || ''; tr.appendChild(td);
+              });
+              body.appendChild(tr);
+            }
+            if (wrap) { wrap.style.display = allRows.length ? '' : 'none'; }
+            if (empty) { empty.style.display = allRows.length ? 'none' : ''; }
+            updateKpis();
+            renderPager();
+          }
+          function scheduleRender() {
+            if (pendingRender) { return; }
+            pendingRender = window.setTimeout(function () { pendingRender = 0; renderPage(); }, 120);
           }
           if (stop) { stop.style.display = ''; stop.onclick = function () { controller.abort(); setInfo('Dihentikan. Data yang sudah tampil tetap ada.'); }; }
+          var url = './process/live_sales.php?' + location.search.replace(/^\?/, '');
           fetch(url, {credentials: 'same-origin', signal: controller.signal, headers: {'Accept': 'application/x-ndjson'}})
             .then(function (response) {
               if (!response.ok || !response.body) { throw new Error('HTTP ' + response.status); }
@@ -267,12 +320,12 @@ $actions = $syncButton
                   lines.forEach(function (line) {
                     if (!line.trim()) { return; }
                     var event; try { event = JSON.parse(line); } catch (e) { return; }
-                    if (event.type === 'row') { append(event.data); }
-                    if (event.type === 'progress') { setInfo('Membaca ' + Number(event.rows).toLocaleString('id-ID') + ' record...'); if (bar) { bar.style.width = '35%'; } }
+                    if (event.type === 'row') { allRows.push(event.data); scheduleRender(); }
+                    if (event.type === 'progress') { setInfo('Membaca ' + Number(event.rows).toLocaleString('id-ID') + ' record...'); if (bar) { bar.style.width = '45%'; } }
                     if (event.type === 'done') {
                       setInfo('Selesai: ' + Number(event.rows).toLocaleString('id-ID') + ' record dari MikroTik.');
                       if (bar) { bar.style.width = '100%'; }
-                      if (!event.rows && empty) { empty.style.display = ''; }
+                      renderPage();
                       if (stop) { stop.style.display = 'none'; }
                     }
                     if (event.type === 'error') { setInfo('Gagal membaca MikroTik: ' + event.error); }

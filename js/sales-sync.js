@@ -54,9 +54,17 @@
     });
   }
 
-  function setProgress(percent) {
+  function setProgress(percent, indeterminate) {
     var bar = $("mmSyncBar");
-    if (bar) { bar.style.width = Math.max(0, Math.min(100, percent || 0)) + "%"; }
+    if (!bar) { return; }
+    var wrap = bar.parentNode;
+    if (indeterminate) {
+      if (wrap) { wrap.classList.add("is-indeterminate"); }
+      bar.style.width = "35%";
+      return;
+    }
+    if (wrap) { wrap.classList.remove("is-indeterminate"); }
+    bar.style.width = Math.max(0, Math.min(100, percent || 0)) + "%";
   }
 
   function render(data) {
@@ -105,10 +113,13 @@
 
     var expected = Number(router.expected_scripts || 0);
     var seen = Number(router.scanned_scripts || 0);
-    if (expected > 0) {
-      setProgress(Math.min(100, seen / expected * 100));
+    var active = run && ["queued", "starting", "scanning", "importing", "verifying"].indexOf(String(run.status)) !== -1;
+    if (active && expected <= 0) {
+      setProgress(10, true);
+    } else if (expected > 0) {
+      setProgress(Math.min(100, seen / expected * 100), false);
     } else if (run && run.status === "done") {
-      setProgress(100);
+      setProgress(100, false);
     }
 
     if (run && run.status === "failed" && info) {
@@ -157,7 +168,8 @@
         polling = false;
         setRunning(false);
       }
-    }, 2000);
+    }, 1000);
+    loadStatus().catch(function () { /* first immediate refresh */ });
   }
 
   function setRunning(value) {
@@ -185,6 +197,7 @@
     }
     post("start", {delete_after_import: (deleteAfter && deleteAfter.checked) ? "1" : "0"}).then(function (data) {
       render(data);
+      setProgress(8, true);
       var run = data.run || null;
       if (!run) { setRunning(false); return; }
       if (run.worker === "web" && run.mode === "full" && data.months && data.months.length) {
