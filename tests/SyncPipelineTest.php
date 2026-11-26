@@ -177,4 +177,19 @@ final class SyncPipelineTest extends TestCase
         $this->assertSame(33.3, $recon['unsynced_percent']);
     }
 
+    public function testCleanupDeletesOnlyImportedSalesRecords(): void
+    {
+        $records = new RouterRecordRepository($this->db);
+        $valid = $this->rows(1)[0]['name'];
+        $records->upsertMany(array(
+            array('s1', $valid, '*valid', 'mikhmon', 'hotspot1', 'imported', ''),
+            array('s1', 'system backup script', '*other', '', 'hotspot1', 'imported', ''),
+        ), 1);
+        $cleaner = new \Mikhmon\Sync\ImportedSalesCleaner($records, new FakeRouterClient(array()));
+        $result = $cleaner->cleanup('s1');
+        $this->assertSame(1, $result['deleted']);
+        $this->assertNull($records->find('s1', $valid));
+        $this->assertNotNull($records->find('s1', 'system backup script'));
+    }
+
 }

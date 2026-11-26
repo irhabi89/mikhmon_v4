@@ -440,50 +440,16 @@ final class SalesSyncService
      */
     private function cleanupImportedScripts(string $session, int $runId, $client): int
     {
-        $deleted = 0;
-        $errors = array();
-        while (true) {
-            $rows = $this->records->importedWithIds($session, 500);
-            if (empty($rows)) {
-                break;
-            }
-            $progress = false;
-            foreach ($rows as $row) {
-                $name = isset($row['name']) ? (string)$row['name'] : '';
-                $comment = isset($row['script_comment']) ? (string)$row['script_comment'] : '';
-                $rosId = isset($row['ros_script_id']) ? (string)$row['ros_script_id'] : '';
-                if ($name === '' || !RecordParser::isSalesRecord($name, $comment)) {
-                    continue;
-                }
-                if ($rosId === '') {
-                    $errors[] = 'script id tidak tersedia: ' . $name;
-                    continue;
-                }
-                try {
-                    $response = $client->command('/system/script/remove', array('.id' => $rosId));
-                    if (isset($response['!trap'])) {
-                        $errors[] = 'gagal hapus ' . $name;
-                        continue;
-                    }
-                    $this->records->deleteOne($session, $name);
-                    $deleted++;
-                    $progress = true;
-                } catch (\Throwable $e) {
-                    $errors[] = $name . ': ' . $e->getMessage();
-                }
-            }
-            if (!$progress) {
-                break;
-            }
-        }
+        $cleaner = new ImportedSalesCleaner($this->records, $client);
+        $cleanup = $cleaner->cleanup($session);
         $this->runs->update($runId, array(
-            'deleted_router' => $deleted,
-            'delete_error' => empty($errors) ? '' : substr(implode('; ', array_slice($errors, 0, 10)), 0, 2000),
+            'deleted_router' => (int)$cleanup['deleted'],
+            'delete_error' => empty($cleanup['errors']) ? '' : substr(implode('; ', array_slice($cleanup['errors'], 0, 10)), 0, 2000),
         ));
-        if ($deleted > 0) {
+        if ((int)$cleanup['deleted'] > 0) {
             $this->runs->update($runId, array('router_records' => $this->records->count($session)));
         }
-        return $deleted;
+        return (int)$cleanup['deleted'];
     }
 
     public function deleteData(string $session, array $filter, bool $deleteDb, bool $deleteRouter): array
