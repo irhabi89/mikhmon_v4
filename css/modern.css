@@ -100,24 +100,42 @@ body {
 .box-group-area { font-size: 13px; }
 
 /* Buttons */
-.btn {
+.btn, .btn-login {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
+  box-sizing: border-box;
+  height: 34px;
   min-height: 34px;
-  padding: 6px 12px;
+  padding: 0 13px;
+  margin: 0 4px 4px 0;
   border: 1px solid transparent;
   border-radius: 8px;
   font-size: 13px;
   font-weight: 600;
-  line-height: 1.2;
+  line-height: 1;
   cursor: pointer;
   text-decoration: none !important;
   transition: filter .15s ease, box-shadow .15s ease;
 }
+.btn i, .btn-login i { font-size: 13px; line-height: 1; }
 .btn:hover { filter: brightness(1.08); box-shadow: var(--mm-shadow-sm); }
 .btn.bg-secondary, .btn.bg-grey { border-color: var(--mm-border); }
-.btn-sm { min-height: 30px; padding: 4px 9px; font-size: 12px; }
+.btn-sm {
+  height: 28px;
+  min-height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+.mm-page-actions .btn, .mm-toolbar .btn { margin: 0; }
+.mm-page-btn {
+  box-sizing: border-box;
+  height: 32px;
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 12px;
+}
 
 /* Forms */
 .form-control, .group-item, input[type="text"], input[type="password"], input[type="number"],
@@ -196,9 +214,19 @@ table .form-control { min-height: 34px; }
   .card-body { padding: 10px; }
   .card-header { padding: 10px 12px; }
   .table th, .table td { padding: 8px 9px; }
-  .btn { min-height: 36px; }
+  .btn, .btn-login { height: 34px; min-height: 34px; }
 }
 @media (max-width: 600px) {
+  .btn, .btn-login {
+    height: 32px;
+    min-height: 32px;
+    padding: 0 10px;
+    font-size: 12px;
+    gap: 5px;
+  }
+  .btn i, .btn-login i { font-size: 12px; }
+  .btn-sm { height: 28px; min-height: 28px; padding: 0 8px; font-size: 11.5px; }
+  .mm-page-btn { height: 30px; min-height: 30px; padding: 0 8px; font-size: 11.5px; }
   .navbar { padding: 0 6px; overflow: hidden; }
   .navbar-left, .navbar-right { width: auto; }
   .navbar-right a { padding: 18px 6px; }
