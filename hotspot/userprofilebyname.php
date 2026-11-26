@@ -141,23 +141,10 @@ if (!isset($_SESSION["mikhmon"])) {
       $mode = "remove";
     }
 
-    if (!function_exists('mikhmon_webhook_url')) {
+    if (!function_exists('mikhmon_webhook_snippet')) {
       require_once(__DIR__ . '/../lib/webhook.php');
     }
-    $mmWebhookRow = function_exists('mikhmon_session_get') ? mikhmon_session_get((string)$session) : null;
-    $mmWebhookLegacyUrl = is_array($mmWebhookRow) && !empty($mmWebhookRow['webhook_url']) ? trim((string)$mmWebhookRow['webhook_url']) : '';
-    $mmWebhookUrl = mikhmon_webhook_url((string)$session, $mmWebhookLegacyUrl);
-    $mmWebhookToken = $mmWebhookUrl !== '' ? mikhmon_webhook_token((string)$session, true) : '';
-    $mmRosQuote = function ($value) {
-      return str_replace(array('\\', '"', '$'), array('\\\\', '\\"', '\\$'), (string)$value);
-    };
-    $mmWebhookPart = '';
-    if ($mmWebhookUrl !== '' && $mmWebhookToken !== '') {
-      $mmWebhookPart = ':local mmwhurl "' . $mmRosQuote($mmWebhookUrl) . '"; '
-        . ':local mmwhtoken "' . $mmRosQuote($mmWebhookToken) . '"; '
-        . ':do { /tool fetch url=$mmwhurl http-method=post http-header-field="X-Mikhmon-Token: $mmwhtoken" http-data=$sname keep-result=no; } '
-        . 'on-error={ :log warning "mikhmon webhook gagal; record tetap ditulis ke script" }; ';
-    }
+    $mmWebhookPart = mikhmon_webhook_snippet((string)$session);
     $record = '; :local mac $"mac-address"; :local time [/system clock get time ]; :local mmsrv ""; :foreach mma in=[/ip/hotspot/active/find where user=$user] do={ :set mmsrv [ /ip/hotspot/active/get $mma server ] }; :if ($mmsrv = "") do={ :local mmu [/ip/hotspot/user/find where name=$user]; :if ([:len $mmu] > 0) do={ :set mmsrv [/ip/hotspot/user/get $mmu server] } }; :if ($mmsrv = "") do={ :local mmh [/ip/hotspot/find where interface=$interface]; :if ([:len $mmh] > 0) do={ :set mmsrv [/ip/hotspot/get $mmh name] } }; :local sname "$legacy-|-$time-|-$user-|-'.$price.'-|-$address-|-$mac-|-' . $validity . '-|-'.$name.'-|-$comment|#MMSRV1#|$mmsrv"; ' . $mmWebhookPart . '/system script add name=$sname owner="$monthname$year" source=$legacy comment=mikhmon; /system script set [find name=$sname] owner="$monthname$year"';
 
     $onlogin = mikhmon_v3_onlogin_script($expmode, $price, $validity, $sprice, $getlock, $mode, $record, $lock);

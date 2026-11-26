@@ -29,17 +29,9 @@ if (!function_exists('mikhmon_webhook_public_url')) {
 }
 
 if (!function_exists('mikhmon_webhook_url')) {
-    function mikhmon_webhook_url(string $session, string $legacyUrl = ''): string
+    function mikhmon_webhook_url(string $session): string
     {
         $base = mikhmon_webhook_public_url();
-        if ($base === '' && trim($legacyUrl) !== '') {
-            // Backward compatibility for a URL saved by older versions.
-            $legacyUrl = trim($legacyUrl);
-            if (strpos($legacyUrl, 'session=') === false) {
-                $legacyUrl .= (strpos($legacyUrl, '?') === false ? '?' : '&') . 'session=' . rawurlencode($session);
-            }
-            return $legacyUrl;
-        }
         if ($base === '') {
             return '';
         }
@@ -64,9 +56,23 @@ if (!function_exists('mikhmon_webhook_token')) {
     }
 }
 
-if (!function_exists('mikhmon_webhook_ready')) {
-    function mikhmon_webhook_ready(string $session, string $legacyUrl = ''): bool
+if (!function_exists('mikhmon_webhook_snippet')) {
+    function mikhmon_webhook_snippet(string $session): string
     {
-        return mikhmon_webhook_url($session, $legacyUrl) !== '' && mikhmon_webhook_token($session) !== '';
+        $url = mikhmon_webhook_url($session);
+        if ($url === '') {
+            return '';
+        }
+        $token = mikhmon_webhook_token($session, true);
+        if ($token === '') {
+            return '';
+        }
+        $quote = static function ($value) {
+            return str_replace(array('\\', '"', '$'), array('\\\\', '\\"', '\\$'), (string)$value);
+        };
+        return ':local mmwhurl "' . $quote($url) . '"; '
+            . ':local mmwhtoken "' . $quote($token) . '"; '
+            . ':do { /tool fetch url=$mmwhurl http-method=post http-header-field="X-Mikhmon-Token: $mmwhtoken" http-data=$sname keep-result=no; } '
+            . 'on-error={ :log warning "mikhmon webhook gagal; record tetap ditulis ke script" }; ';
     }
 }

@@ -69,7 +69,11 @@ if (!isset($_SESSION["mikhmon"])) {
       $mode = "remove";
     }
 
-    $record = '; :local mac $"mac-address"; :local time [/system clock get time ]; :local sname "$legacy-|-$time-|-$user-|-'.$price.'-|-$address-|-$mac-|-' . $validity . '-|-'.$name.'-|-$comment"; /system script add name=$sname owner="$monthname$year" source=$legacy comment=mikhmon; /system script set [find name=$sname] owner="$monthname$year"';
+    if (!function_exists('mikhmon_webhook_snippet')) {
+      require_once(__DIR__ . '/../lib/webhook.php');
+    }
+    $mmWebhookPart = mikhmon_webhook_snippet((string)$session);
+    $record = '; :local mac $"mac-address"; :local time [/system clock get time ]; :local sname "$legacy-|-$time-|-$user-|-'.$price.'-|-$address-|-$mac-|-' . $validity . '-|-'.$name.'-|-$comment"; ' . $mmWebhookPart . '/system script add name=$sname owner="$monthname$year" source=$legacy comment=mikhmon; /system script set [find name=$sname] owner="$monthname$year"';
 
     $onlogin = mikhmon_v3_onlogin_script($expmode, $price, $validity, $sprice, $getlock, $mode, $record, $lock);
     $bgservice = mikhmon_v3_bgservice_script($name, $mode);

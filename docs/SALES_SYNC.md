@@ -117,10 +117,11 @@ https://mikhmon.example.com/process/sales_webhook.php?session=<session>
 The URL must be publicly reachable from RouterOS. Do not point it at
 `localhost`, `127.0.0.1`, or a LAN-only address.
 
-The **token is per router session** and is stored in `mikhmon_sessions`.
-Settings shows the generated URL, the token, and a “Buat token baru” option.
-New tokens invalidate existing on-login snippets until the profile is saved
-again. The token is sent as `X-Mikhmon-Token`, never in the URL.
+The **token is per router session** and is created automatically the first time
+a hotspot profile is added or updated. It is stored in `mikhmon_sessions` but
+is never shown or editable in the settings UI. Subsequent profile updates reuse
+the same token. The token is sent as `X-Mikhmon-Token`, never in the URL.
+There is no URL or token field in Settings.
 
 On-login v3 tries `/tool fetch`; regardless of webhook success, the script
 record is always written to `/system/script`. If `MIKHMON_PUBLIC_URL` is empty,
