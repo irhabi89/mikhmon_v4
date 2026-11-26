@@ -1,36 +1,34 @@
-# Branch integration
+# Branch strategy and attribution
 
-`feat/report-sqlite-ui` is the base. Feature branches are kept separate and
-receive the base via a merge commit (never force-push).
+**MIKHMON v4 — GHAIB-NETWORK Edition**  
+Maintained by **PT GHAIB-NETWORK** · Developer: **quiqxiq**  
+Original Mikhmon by Laksamadi Guko (GPLv2).
 
-## 99barokah (PPP + auto isolir + PPP dashboard cards)
+## Active branches
 
-Local integration branch: `integration/99barokah`.
+| Branch | Purpose | Notes |
+|---|---|---|
+| `feat/report-sqlite-ui` | Base edition | SQLite sales report/sync, server tracking, responsive UI, performance |
+| `99barokah` | PPP edition | Base + PPP module, auto-isolir, PPP dashboard cards |
+| `parto` | Voucher edition | Base + server-aware small/new voucher template and Print New button |
+
+No temporary `integration/*` branches are kept. Changes are merged from the
+base branch into the two feature branches with normal merge commits; force-push
+is not used.
+
+## Merge rules
 
 ```bash
+git checkout 99barokah
 git merge feat/report-sqlite-ui
+# resolve dashboard/menu/lang conflicts
+composer test
 ```
 
-Resolved rules:
+For `parto`, preserve the voucher changes (`default-new.php`,
+`template-new.php`, Print New button) and per-server dashboard.
 
-- Keep `ppp/` and `process/psecret.php` / `removepprofile.php`.
-- Keep the PPP menu and `lang/*` keys.
-- Keep `dashboard/home.php` PPP cards; use
-  `resources/views/components/server-cards.php` for per-server cards.
-- `dashboard/home1.php` is an unused duplicate and should be removed.
-- Do not overwrite the SQLite session DB with `include/config.php` arrays.
-
-## parto (per-server dashboard)
-
-Local integration branch: `integration/parto`.
-
-- The old manual username -> hotspot-user server join is removed.
-- Use `sales_records.server_name` and `SalesRepository::serverStats()`.
-- Active/user counts still come from one `/ip/hotspot/active/print` and
-  `/ip/hotspot/user/print` with `.proplist=server`.
-- Legacy rows (`server_name=''`) appear as "Tanpa server".
-
-## Verification after each merge
+## Verification
 
 ```bash
 composer install
@@ -38,4 +36,9 @@ composer test
 php -l (all changed files)
 ```
 
-Smoke test: dashboard, report selling, PPP pages (99barokah), server filter.
+Smoke test: dashboard, report selling, server filter, PPP pages (99barokah),
+voucher Print New (parto).
+
+## Attribution
+
+See [`NOTICE.md`](../NOTICE.md) and [`CHANGELOG.md`](../CHANGELOG.md).

@@ -1,5 +1,9 @@
 # Mikhmon architecture
 
+**MIKHMON v4 — GHAIB-NETWORK Edition**  
+Maintained by PT GHAIB-NETWORK · Developer: quiqxiq  
+Original Mikhmon by Laksamadi Guko (GPLv2).
+
 ## Layers
 
 - Entry points (`index.php`, `admin.php`, `status/index.php`, `process/*.php`)

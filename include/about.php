@@ -1,94 +1,84 @@
 <?php
 /*
- *  Copyright (C) 2018 Laksamadi Guko.
+ *  Original Mikhmon: Copyright (C) 2018 Laksamadi Guko.
+ *  GHAIB-NETWORK Edition modifications: Copyright (C) 2026 PT GHAIB-NETWORK.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
  *  the Free Software Foundation; either version 2 of the License, or
  *  (at your option) any later version.
- *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 if (session_status() === PHP_SESSION_NONE) session_start();
-// hide all error
 error_reporting(0);
 if (!isset($_SESSION["mikhmon"])) {
   header("Location:../admin.php?id=login");
-} else {
+  exit;
 }
+
+$versionFile = __DIR__ . '/../verson.txt';
+$versionData = json_decode((string)@file_get_contents($versionFile), true);
+if (!is_array($versionData)) { $versionData = array(); }
+$version = htmlspecialchars((string)($versionData['version'] ?? ($_SESSION['v'] ?? 'v4.0.0')), ENT_QUOTES, 'UTF-8');
+$branch = htmlspecialchars((string)($versionData['branch'] ?? ($_SESSION['vbranch'] ?? '')), ENT_QUOTES, 'UTF-8');
+$updated = htmlspecialchars((string)($versionData['updated'] ?? '2026-11-26'), ENT_QUOTES, 'UTF-8');
+$developer = htmlspecialchars((string)($versionData['developer'] ?? 'quiqxiq'), ENT_QUOTES, 'UTF-8');
+$edition = htmlspecialchars((string)($versionData['edition'] ?? 'GHAIB-NETWORK'), ENT_QUOTES, 'UTF-8');
 ?>
-<style>
-.iFWrapper {
-	position: relative;
-	padding-bottom: 56.25%; /* 16:9 */
-	padding-top: 25px;
-	height: 0;
-}
-.iFWrapper iframe {
-	position: absolute;
-	top: 0;
-	left: 0;
-	width: 100%;
-  height: 100%;
-  border :none;
-}
-</style>
 <div class="row">
   <div class="col-12">
     <div class="card">
       <div class="card-header">
-        <h3><i class="fa fa-info-circle"></i> About</h3>
+        <h3><i class="fa fa-info-circle"></i> About MIKHMON</h3>
       </div>
       <div class="card-body">
-        <h3>MIKHMON V<?= $_SESSION['v']; ?></h3>
-<p>
-  Aplikasi ini dipersembahkan untuk pengusaha hotspot di manapun Anda berada.
-  Semoga makin sukses.
-</p>
-<p>
-  <ul>
-    <li>
-      Author : Laksamadi Guko
-    </li>
-    <li>
-      Licence : <a href="https://github.com/laksa19/mikhmonv2/blob/master/LICENSE">GPLv2</a>
-    </li>
-    <li>
-      API Class : <a href="https://github.com/BenMenking/routeros-api">routeros-api</a>
-    </li>
-    <li>
-      Website : <a href="https://laksa19.github.io">laksa19.github.io</a>
-    </li>
-    <li>
-      Facebook : <a href="https://fb.com/laksamadi">fb.com/laksamadi</a>
-    </li>
-  </ul>
-</p>
-<p>
-  Terima kasih untuk semua yang telah mendukung pengembangan MIKHMON.
-</p>
-<div>
-    <i>Copyright &copy; <i> 2018 Laksamadi Guko</i></i>
-</div>
-</div>
-</div>
-</div>
-<div class="col-12">
-<div class="card">
-  <div class="card-header">
-  <h3><i class="fa fa-info-circle"></i> Changelog</h3>
+        <h3>MIKHMON <?= $version; ?> — <?= $edition; ?> Edition</h3>
+        <p>
+          Aplikasi manajemen hotspot MikroTik untuk pengusaha hotspot.
+          Edisi ini dikembangkan dan dipelihara oleh <b>PT GHAIB-NETWORK</b>.
+        </p>
+        <ul>
+          <li><b>Modified and maintained by:</b> PT GHAIB-NETWORK</li>
+          <li><b>Developer:</b> <?= $developer; ?></li>
+          <li><b>Branch:</b> <?= $branch !== '' ? $branch : 'feat/report-sqlite-ui'; ?></li>
+          <li><b>Version:</b> <?= $version; ?> (<?= $updated; ?>)</li>
+          <li><b>Original author:</b> Laksamadi Guko</li>
+          <li><b>License:</b> <a href="https://github.com/laksa19/mikhmonv3/blob/master/LICENSE" target="_blank" rel="noopener">GPLv2</a></li>
+          <li><b>GHAIB-NETWORK:</b> <a href="https://www.ghaib.net/" target="_blank" rel="noopener">www.ghaib.net</a></li>
+        </ul>
+        <p>
+          <b>Tentang GHAIB-NETWORK</b><br>
+          GHAIB-NETWORK adalah perusahaan teknologi (PT) yang menyediakan solusi
+          IT, administrasi jaringan, konfigurasi MikroTik, pemasangan internet
+          dan CCTV, penarikan kabel fiber optik, serta pengembangan web.
+          Berdiri sejak 2018 dan berbasis di Karduluk, Pragaan, Sumenep,
+          Jawa Timur.
+        </p>
+        <p>
+          <i>Copyright &copy; 2018 Laksamadi Guko. Modifikasi &copy; 2026 PT GHAIB-NETWORK. Developer: <?= $developer; ?>.</i>
+        </p>
+      </div>
+    </div>
   </div>
-  <div class="card-body">
-  <div class="iFWrapper">
-    <iframe src="https://laksa19.github.io/mikhmonv3" ></iframe>
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header">
+        <h3><i class="fa fa-list-alt"></i> Changelog v4.0.0</h3>
+      </div>
+      <div class="card-body">
+        <ul>
+          <li>Laporan penjualan SQLite: filter tanggal/bulan/tahun/server, total transaksi dan nominal, CSV/print.</li>
+          <li>Pencatatan server hotspot pada penjualan baru, filter per-server, dan dashboard server.</li>
+          <li>On-login server-aware, upgrade profile lama, backup dan rollback.</li>
+          <li>UI responsif, ukuran button konsisten, modal dan tabel mobile-friendly.</li>
+          <li>Optimasi performa: cache pendek, async dashboard server cards, pengurangan panggilan API.</li>
+          <li>Branch <b><?= $branch !== '' ? $branch : 'feat/report-sqlite-ui'; ?></b> dapat memiliki fitur tambahan (PPP/auto-isolir atau voucher Print New).</li>
+        </ul>
+        <p>
+          Changelog lengkap: <a href="../CHANGELOG.md" target="_blank" rel="noopener">CHANGELOG.md</a>
+          &nbsp;|&nbsp; Atribusi: <a href="../NOTICE.md" target="_blank" rel="noopener">NOTICE.md</a>
+          &nbsp;|&nbsp; <a href="https://laksa19.github.io/mikhmonv3" target="_blank" rel="noopener">Changelog Mikhmon asli</a>
+        </p>
+      </div>
+    </div>
   </div>
-  </div>
-</div>
-</div>
 </div>

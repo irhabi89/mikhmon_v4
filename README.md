@@ -1,4 +1,36 @@
-### MIKHMON V3
+# MIKHMON v4 — GHAIB-NETWORK Edition
+
+[![GHAIB-NETWORK](https://img.shields.io/badge/Maintained%20by-PT%20GHAIB--NETWORK-0b6e99)](https://www.ghaib.net/)
+[![Developer](https://img.shields.io/badge/Developer-quiqxiq-6f42c1)](https://github.com/quiqxiq)
+
+> **Modified and maintained by PT GHAIB-NETWORK.**  
+> **Developer: quiqxiq**  
+> GHAIB-NETWORK is an Indonesian technology company (PT) providing IT
+> solutions, network administration, MikroTik configuration, internet/CCTV
+> installation, fiber-optic cabling, and web development.
+> Website: https://www.ghaib.net/
+
+This branch: **feat/report-sqlite-ui**  
+Version: **4.0.0** — updated 2026-11-26  
+License: **GPLv2** (original Mikhmon by Laksamadi Guko)
+
+## Fitur utama edisi ini
+
+- Laporan penjualan berbasis SQLite dengan filter tanggal, bulan, tahun,
+  server, pencarian, total transaksi, dan total nominal.
+- Pencatatan nama hotspot server pada setiap penjualan baru.
+- On-login server-aware + upgrade profile lama dengan backup/rollback.
+- Dashboard per-server dan UI responsif untuk desktop/mobile.
+- Optimasi performa: cache pendek, pengurangan panggilan API, dan kartu
+  dashboard async.
+- Sinkronisasi RouterOS bertahap/streaming dan rekonsiliasi data.
+
+Lihat [`CHANGELOG.md`](CHANGELOG.md), [`NOTICE.md`](NOTICE.md), dan
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) untuk detail.
+
+---
+
+## Changelog historis (Mikhmon V3)
 
 #### Download update.zip
 [update.zip](https://raw.githubusercontent.com/laksa19/laksa19.github.io/master/download/update.zip){:target="_blank"}

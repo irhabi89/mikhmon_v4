@@ -1,1 +1,1 @@
-{"version" : "v3.20", "updated" : "06-30-2021 12:02"}
+{"version":"v4.0.0","updated":"2026-11-26","edition":"GHAIB-NETWORK","modified_by":"PT GHAIB-NETWORK","developer":"quiqxiq","branch":"feat/report-sqlite-ui","upstream":"Mikhmon v3 by Laksamadi Guko"}
