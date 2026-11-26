@@ -75,8 +75,14 @@
       if (db.missing) { parts.push("<b class='text-red'>" + fmt(db.missing) + "</b> belum diimpor"); }
       if (db.extra !== null && typeof db.extra !== "undefined" && db.extra > 0) { parts.push("<b>" + fmt(db.extra) + "</b> arsip di database"); }
       if (db.invalid) { parts.push("<b class='text-red'>" + fmt(db.invalid) + "</b> invalid"); }
-      if (data.coverage !== null) { parts.push("Tercakup <b>" + pct(data.coverage) + "</b>"); }
-      if (data.exact !== null && (!db.extra || db.extra <= 0)) { parts.push("Sinkron <b>" + pct(data.exact) + "</b>"); }
+      if (data.unsynced_percent !== null && typeof data.unsynced_percent !== "undefined") {
+        parts.push("<b class='text-orange'>" + pct(data.unsynced_percent) + "</b> belum tersinkron (" + fmt(data.unsynced || db.missing) + ")");
+      } else {
+        parts.push("<b>Belum diverifikasi</b>");
+      }
+      if (data.archive_extra !== null && typeof data.archive_extra !== "undefined" && data.archive_extra > 0) {
+        parts.push(fmt(data.archive_extra) + " arsip DB");
+      }
       if (run && run.status) { parts.push("Status: <b>" + esc(run.status) + "</b>" + (run.phase ? " / " + esc(run.phase) : "")); }
       info.innerHTML = parts.join(" &nbsp;|&nbsp; ");
     }
@@ -88,9 +94,12 @@
       } else if (data.in_sync) {
         badge.className = "mm-badge bg-green text-white";
         badge.innerHTML = '<i class="fa fa-check"></i> 100% Sinkron';
+      } else if (data.unsynced_percent !== null && typeof data.unsynced_percent !== "undefined") {
+        badge.className = "mm-badge " + (Number(data.unsynced || 0) === 0 ? "bg-blue text-white" : "bg-orange text-white");
+        badge.innerHTML = '<i class="fa fa-refresh"></i> Belum tersinkron ' + pct(data.unsynced_percent) + ' (' + fmt(data.unsynced || 0) + ')';
       } else {
         badge.className = "mm-badge bg-yellow text-dark";
-        badge.innerHTML = '<i class="fa fa-refresh"></i> ' + (data.coverage !== null ? pct(data.coverage) + " tercakup" : "Belum diverifikasi");
+        badge.innerHTML = '<i class="fa fa-refresh"></i> Belum diverifikasi';
       }
     }
 
@@ -104,6 +113,12 @@
 
     if (run && run.status === "failed" && info) {
       info.innerHTML += "<br><b class='text-red'>" + esc(run.error || "sync gagal") + "</b>";
+    }
+    if (run && Number(run.deleted_router || 0) > 0 && info) {
+      info.innerHTML += "<br><span class='text-green'>Script penjualan dihapus dari MikroTik: <b>" + fmt(run.deleted_router) + "</b></span>";
+    }
+    if (run && run.delete_error && info) {
+      info.innerHTML += "<br><span class='text-red'>Sebagian penghapusan gagal: " + esc(run.delete_error) + "</span>";
     }
   }
 
@@ -163,7 +178,12 @@
   function start() {
     setRunning(true);
     showError("");
-    post("start", {}).then(function (data) {
+    var deleteAfter = $("mmDeleteAfterImport");
+    if (deleteAfter && deleteAfter.checked && !window.confirm("Hapus script record penjualan dari MikroTik setelah import berhasil? Script lain tidak akan dihapus.")) {
+      setRunning(false);
+      return;
+    }
+    post("start", {delete_after_import: (deleteAfter && deleteAfter.checked) ? "1" : "0"}).then(function (data) {
       render(data);
       var run = data.run || null;
       if (!run) { setRunning(false); return; }

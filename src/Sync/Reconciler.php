@@ -76,6 +76,9 @@ final class Reconciler
         $coverage = $router > 0 ? round($matched / $router * 100, 1) : null;
         $denominator = $matched + $missing + $invalid + ($extra === null ? 0 : $extra);
         $exact = $denominator > 0 ? round($matched / $denominator * 100, 1) : null;
+        $unsynced = $missing;
+        $unsyncedPercent = $complete && $router > 0 ? round($unsynced / $router * 100, 1) : null;
+        $syncedPercent = $complete && $router > 0 ? round($matched / $router * 100, 1) : null;
         $inSync = $complete && $router > 0 && $missing === 0 && $extra === 0 && $invalid === 0;
 
         return array(
@@ -94,6 +97,11 @@ final class Reconciler
             'imported' => $imported,
             'coverage' => $coverage,
             'exact' => $exact,
+            'unsynced' => $unsynced,
+            'unsynced_percent' => $unsyncedPercent,
+            'synced_percent' => $syncedPercent,
+            'archive_extra' => $extra,
+            'verified' => $complete,
             'in_sync' => $inSync,
             'samples' => array(
                 'missing' => $this->sample('sales_router_records', $session, true),
@@ -125,6 +133,9 @@ final class Reconciler
         $coverage = $snapshot > 0 ? round($matched / $snapshot * 100, 1) : null;
         $denom = $matched + $missing + $invalid;
         $exact = $denom > 0 ? round($matched / $denom * 100, 1) : null;
+        $unsynced = $missing + $invalid;
+        $unsyncedPercent = $snapshot > 0 ? round($unsynced / $snapshot * 100, 1) : null;
+        $syncedPercent = $snapshot > 0 ? round($matched / $snapshot * 100, 1) : null;
 
         return array(
             'run' => $run,
@@ -142,6 +153,11 @@ final class Reconciler
             'imported' => max(0, $snapshot - $pending - $invalid),
             'coverage' => $coverage,
             'exact' => $exact,
+            'unsynced' => $unsynced,
+            'unsynced_percent' => $unsyncedPercent,
+            'synced_percent' => $syncedPercent,
+            'archive_extra' => null,
+            'verified' => false,
             'in_sync' => false,
             'samples' => array('missing' => array(), 'extra' => array(), 'invalid' => array()),
         );

@@ -15,7 +15,9 @@ function mikhmon_db()
 {
     static $db = null;
     if ($db === null) {
-        $path = dirname(__DIR__) . '/data/mikhmon.db';
+        $path = class_exists('\\Mikhmon\\Support\\Config')
+            ? \Mikhmon\Support\Config::dbPath()
+            : dirname(__DIR__) . '/data/mikhmon.db';
         if (!is_dir(dirname($path))) {
             @mkdir(dirname($path), 0755, true);
         }

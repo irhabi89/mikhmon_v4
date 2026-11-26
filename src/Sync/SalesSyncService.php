@@ -74,6 +74,10 @@ final class SalesSyncService
         $mode = $month !== null ? 'month' : 'full';
         $worker = $this->chooseWorker();
         $runId = $this->runs->create($session, $mode, $worker, -1);
+        $deleteAfter = !empty($opts['delete_after_import']);
+        $this->runs->update($runId, array(
+            'delete_after_import' => $deleteAfter ? 1 : 0,
+        ));
         if ($month !== null) {
             $this->runs->update($runId, array('month_key' => $month));
         }
@@ -172,6 +176,9 @@ final class SalesSyncService
             $this->runs->update($runId, array('status' => 'verifying', 'phase' => 'verify'));
             $result = $this->reconciler->reconcile($session);
             $this->reconciler->persist($runId, $session, $result);
+            if (!empty($run['delete_after_import']) && $result['complete'] && (int)$result['missing'] === 0) {
+                $this->cleanupImportedScripts($session, $runId, $client);
+            }
             $this->runs->update($runId, array(
                 'status' => 'done',
                 'phase' => 'done',
@@ -241,6 +248,11 @@ final class SalesSyncService
             ),
             'coverage' => $recon['coverage'],
             'exact' => $recon['exact'],
+            'unsynced' => isset($recon['unsynced']) ? (int)$recon['unsynced'] : (int)$recon['missing'],
+            'unsynced_percent' => isset($recon['unsynced_percent']) ? $recon['unsynced_percent'] : null,
+            'synced_percent' => isset($recon['synced_percent']) ? $recon['synced_percent'] : null,
+            'archive_extra' => isset($recon['archive_extra']) ? $recon['archive_extra'] : null,
+            'verified' => isset($recon['verified']) ? (bool)$recon['verified'] : (bool)$recon['complete'],
             'in_sync' => (bool)$recon['in_sync'],
             'empty' => (bool)$recon['empty'],
             'run' => $run,
@@ -276,6 +288,9 @@ final class SalesSyncService
         $coverage = $snapshot > 0 ? round($matched / $snapshot * 100, 1) : null;
         $denom = $matched + $missing + $invalid + ($complete ? $extra : 0);
         $exact = $denom > 0 ? round($matched / $denom * 100, 1) : null;
+        $unsynced = $missing;
+        $unsyncedPercent = $complete && $snapshot > 0 ? round($unsynced / $snapshot * 100, 1) : null;
+        $syncedPercent = $complete && $snapshot > 0 ? round($matched / $snapshot * 100, 1) : null;
         $available = $latest !== null && (int)$latest['expected_scripts'] >= 0 && (string)$latest['status'] !== 'failed';
         if ($latest !== null && (string)$latest['error'] !== '' && stripos((string)$latest['error'], 'connection') !== false) {
             $available = false;
@@ -304,6 +319,11 @@ final class SalesSyncService
             ),
             'coverage' => $coverage,
             'exact' => $exact,
+            'unsynced' => $unsynced,
+            'unsynced_percent' => $unsyncedPercent,
+            'synced_percent' => $syncedPercent,
+            'archive_extra' => $complete ? $extra : null,
+            'verified' => $complete,
             'in_sync' => $complete && $snapshot > 0 && $missing === 0 && $extra === 0 && $invalid === 0,
             'empty' => $snapshot === 0 && $dbTotal === 0,
             'run' => $latest,
@@ -362,6 +382,18 @@ final class SalesSyncService
         }
         $result = $this->reconciler->reconcile($session);
         $this->reconciler->persist($runId, $session, $result);
+        if (!empty($run['delete_after_import']) && $result['complete'] && (int)$result['missing'] === 0) {
+            try {
+                $client = $this->factory->forSession($session);
+                $client->connect();
+                $this->cleanupImportedScripts($session, $runId, $client);
+                $client->close();
+            } catch (\Throwable $e) {
+                $this->runs->update($runId, array('delete_error' => $e->getMessage()));
+            }
+            $result = $this->reconciler->reconcile($session);
+            $this->reconciler->persist($runId, $session, $result);
+        }
         $this->runs->update($runId, array(
             'status' => 'done',
             'phase' => 'done',
@@ -402,6 +434,58 @@ final class SalesSyncService
      * @param array<string,mixed> $filter
      * @return array{db:int,router:int,errors:array<int,string>}
      */
+    /**
+     * Delete only sales-record scripts that were successfully imported.
+     * Never deletes arbitrary scripts. Returns the number removed.
+     */
+    private function cleanupImportedScripts(string $session, int $runId, $client): int
+    {
+        $deleted = 0;
+        $errors = array();
+        while (true) {
+            $rows = $this->records->importedWithIds($session, 500);
+            if (empty($rows)) {
+                break;
+            }
+            $progress = false;
+            foreach ($rows as $row) {
+                $name = isset($row['name']) ? (string)$row['name'] : '';
+                $comment = isset($row['script_comment']) ? (string)$row['script_comment'] : '';
+                $rosId = isset($row['ros_script_id']) ? (string)$row['ros_script_id'] : '';
+                if ($name === '' || !RecordParser::isSalesRecord($name, $comment)) {
+                    continue;
+                }
+                if ($rosId === '') {
+                    $errors[] = 'script id tidak tersedia: ' . $name;
+                    continue;
+                }
+                try {
+                    $response = $client->command('/system/script/remove', array('.id' => $rosId));
+                    if (isset($response['!trap'])) {
+                        $errors[] = 'gagal hapus ' . $name;
+                        continue;
+                    }
+                    $this->records->deleteOne($session, $name);
+                    $deleted++;
+                    $progress = true;
+                } catch (\Throwable $e) {
+                    $errors[] = $name . ': ' . $e->getMessage();
+                }
+            }
+            if (!$progress) {
+                break;
+            }
+        }
+        $this->runs->update($runId, array(
+            'deleted_router' => $deleted,
+            'delete_error' => empty($errors) ? '' : substr(implode('; ', array_slice($errors, 0, 10)), 0, 2000),
+        ));
+        if ($deleted > 0) {
+            $this->runs->update($runId, array('router_records' => $this->records->count($session)));
+        }
+        return $deleted;
+    }
+
     public function deleteData(string $session, array $filter, bool $deleteDb, bool $deleteRouter): array
     {
         $this->assertSession($session);

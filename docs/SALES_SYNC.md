@@ -70,3 +70,43 @@ bin/mikhmon router:onlogin-rollback --session=<router> --file=data/backups/onlog
 Old records have `server_name=''` and can be filtered with
 `server=__none__`. Reports/export/print and the dashboard server cards support
 the `server` filter.
+
+## Live fallback when the database is empty
+
+`process/live_sales.php` streams sales records directly from
+`/system/script/print` as NDJSON. It is read-only: it does not write SQLite and
+does not start a sync/background job. The report page shows a “Data langsung
+dari MikroTik” banner and appends rows as they arrive.
+
+## Accurate unsynced percentage
+
+For a completed scan:
+
+```text
+unsynced = missing (snapshot rows not present in sales_records)
+unsynced_percent = unsynced / router_total * 100
+synced_percent = matched / router_total * 100
+archive_extra = db_total - matched
+```
+
+If the scan is incomplete, percentages are `null` and the UI says
+“Belum diverifikasi”. `archive_extra` is shown separately and is not counted as
+unsynced.
+
+## Manual import: delete MikroTik sales records
+
+The sync modal has an opt-in checkbox. After a successful manual import and
+verification, only snapshot rows in state `imported` are deleted from
+`/system/script`. Each name is revalidated with `RecordParser::isSalesRecord`;
+non-sales scripts are never deleted. Invalid/pending records are left in place.
+
+## On-login webhook fallback
+
+Per-session settings can hold a webhook URL and token. On-login v3 tries
+`/tool fetch` to `process/sales_webhook.php`; regardless of webhook success, the
+script record is always written to `/system/script`. This guarantees a
+durable fallback if the webhook is unreachable or returns an error. The webhook
+is idempotent because `sales_records` has `UNIQUE(session, name)`.
+
+Existing profiles must be re-saved (or upgraded) to receive the new webhook
+snippet; profiles without webhook still write the durable script record.

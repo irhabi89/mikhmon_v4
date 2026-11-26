@@ -43,6 +43,13 @@ Lihat [`CHANGELOG.md`](CHANGELOG.md), [`NOTICE.md`](NOTICE.md),
 
 ---
 
+## Fitur operasional tambahan
+
+- Fallback live dari script MikroTik saat database kosong (read-only, tanpa auto-sync).
+- Persentase belum tersinkron yang akurat dan terverifikasi.
+- Opsi hapus script record penjualan setelah import manual (script lain aman).
+- Webhook on-login opsional dengan fallback script yang selalu ditulis.
+
 ## Changelog historis (Mikhmon V3)
 
 #### Download update.zip

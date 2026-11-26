@@ -146,4 +146,35 @@ final class SyncPipelineTest extends TestCase
         $this->assertSame(0.0, (float)$reconcile['exact']);
         $this->assertFalse($reconcile['in_sync']);
     }
+    public function testExactUnsyncedMetricsAndArchive(): void
+    {
+        $runs = new SyncRunRepository($this->db);
+        $records = new RouterRecordRepository($this->db);
+        $sales = new SalesRepository($this->db);
+        $runId = $runs->create('s1', 'full', 'web', 3);
+        $runs->update($runId, array('status' => 'done', 'complete' => 1, 'router_records' => 3, 'missing' => 1, 'invalid' => 0, 'extra' => 0));
+        $rows = $this->rows(3);
+        $snapshot = array();
+        foreach ($rows as $row) {
+            $parsed = \Mikhmon\Support\RecordParser::parse($row['name']);
+            $snapshot[] = array('s1', $row['name'], $row['.id'], 'mikhmon', (string)($parsed['server_name'] ?? ''), 'pending', '');
+        }
+        $records->upsertMany($snapshot, $runId);
+        foreach (array_slice($rows, 0, 2) as $row) {
+            $parsed = \Mikhmon\Support\RecordParser::parse($row['name']);
+            $sales->insertParsed('s1', $row['name'], $parsed, $row['.id'], 'mikhmon');
+        }
+        $recon = (new Reconciler($this->db, $runs))->reconcile('s1');
+        $this->assertSame(1, $recon['unsynced']);
+        $this->assertSame(33.3, $recon['unsynced_percent']);
+        $this->assertTrue($recon['verified']);
+        $this->assertSame(0, $recon['archive_extra']);
+
+        $extra = \Mikhmon\Support\RecordParser::parse('nov/20/2026-|-10:00:00-|-archive-|-5000-|-addr-|-AA:BB:CC:DD:EE:99-|-30d-|-1mb-|-ok');
+        $sales->insertParsed('s1', 'nov/20/2026-|-10:00:00-|-archive-|-5000-|-addr-|-AA:BB:CC:DD:EE:99-|-30d-|-1mb-|-ok', $extra, '', 'mikhmon');
+        $recon = (new Reconciler($this->db, $runs))->reconcile('s1');
+        $this->assertSame(1, $recon['archive_extra']);
+        $this->assertSame(33.3, $recon['unsynced_percent']);
+    }
+
 }

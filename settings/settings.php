@@ -96,6 +96,11 @@ if (!isset($_SESSION["mikhmon"])) {
 
     $sesname = (preg_replace('/\s+/', '-', $_POST['sessname']));
     $slivereport = ($_POST['livereport']);
+    $swebhookurl = isset($_POST['webhook_url']) ? trim((string)$_POST['webhook_url']) : '';
+    $swebhooktoken = isset($_POST['webhook_token']) ? trim((string)$_POST['webhook_token']) : '';
+    if ($swebhooktoken === '') {
+      try { $swebhooktoken = bin2hex(random_bytes(16)); } catch (Throwable $e) { $swebhooktoken = ''; }
+    }
 
     
     // Mikhmon v3.21+: write the session to SQLite (Phase 4 of the
@@ -119,6 +124,8 @@ if (!isset($_SESSION["mikhmon"])) {
       'infolp' => $sinfolp,
       'idleto' => $sidleto,
       'live_report' => $slivereport,
+      'webhook_url' => $swebhookurl,
+      'webhook_token' => $swebhooktoken,
     ));
     $_SESSION["connect"] = "";
     if (!empty($_POST['connect_after_save'])) {
@@ -136,6 +143,9 @@ if (!isset($_SESSION["mikhmon"])) {
 ?>
 <?php
   $settings_form_name = 'settings';
+  $webhookSessionRow = mikhmon_session_get((string)$session);
+  $webhook_url = is_array($webhookSessionRow) && isset($webhookSessionRow['webhook_url']) ? (string)$webhookSessionRow['webhook_url'] : '';
+  $webhook_token = is_array($webhookSessionRow) && isset($webhookSessionRow['webhook_token']) ? (string)$webhookSessionRow['webhook_token'] : '';
 ?>
 <script>
   function saveAndConnect(){
@@ -257,6 +267,12 @@ if (!isset($_SESSION["mikhmon"])) {
 	</tr>
 	<tr>
 	<td class="align-middle"><?= $_dns_name ?>  </td><td><input class="form-control" type="text" size="15" maxlength="500" name="dnsname" title="DNS Name [IP->Hotspot->Server Profiles->DNS Name]" value="<?= $dnsname; ?>" required="1"/></td>
+	</tr>
+	<tr>
+	<td class="align-middle">Webhook URL</td><td><input class="form-control" type="url" maxlength="500" name="webhook_url" placeholder="https://domain/process/sales_webhook.php" value="<?= htmlspecialchars((string)($webhook_url ?? ''), ENT_QUOTES, 'UTF-8'); ?>"/></td>
+	</tr>
+	<tr>
+	<td class="align-middle">Webhook Token</td><td><input class="form-control" type="text" maxlength="128" name="webhook_token" value="<?= htmlspecialchars((string)($webhook_token ?? ''), ENT_QUOTES, 'UTF-8'); ?>"/><small class="mm-muted">Token untuk header X-Mikhmon-Token. Biarkan kosong untuk membuat baru.</small></td>
 	</tr>
 	<tr>
 	<td class="align-middle"><?= $_currency ?>  </td><td><input class="form-control" type="text" size="3" maxlength="4" name="currency" title="currency" value="<?= $currency; ?>" required="1"/></td>

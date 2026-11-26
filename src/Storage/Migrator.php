@@ -14,7 +14,7 @@ use Mikhmon\Router\RouterTarget;
  */
 final class Migrator
 {
-    public const VERSION = 4;
+    public const VERSION = 5;
 
     /** @var Database */
     private $db;
@@ -110,6 +110,33 @@ final class Migrator
             }
             $pdo->exec($this->readSql('004_server.sql'));
             $notes[] = 'applied 004_server.sql';
+        }
+
+        // 6. Manual import cleanup flags and on-login webhook settings.
+        if ($version < 5) {
+            $syncColumns = array(
+                'delete_after_import' => "INTEGER NOT NULL DEFAULT 0",
+                'deleted_router' => "INTEGER NOT NULL DEFAULT 0",
+                'delete_error' => "TEXT NOT NULL DEFAULT ''",
+            );
+            foreach ($syncColumns as $column => $definition) {
+                if (!$this->columnExists('sales_sync_runs', $column)) {
+                    $pdo->exec('ALTER TABLE sales_sync_runs ADD COLUMN "' . $column . '" ' . $definition);
+                    $notes[] = 'added sales_sync_runs.' . $column;
+                }
+            }
+            $sessionColumns = array(
+                'webhook_url' => "TEXT NOT NULL DEFAULT ''",
+                'webhook_token' => "TEXT NOT NULL DEFAULT ''",
+            );
+            foreach ($sessionColumns as $column => $definition) {
+                if (!$this->columnExists('mikhmon_sessions', $column)) {
+                    $pdo->exec('ALTER TABLE mikhmon_sessions ADD COLUMN "' . $column . '" ' . $definition);
+                    $notes[] = 'added mikhmon_sessions.' . $column;
+                }
+            }
+            $pdo->exec($this->readSql('005_sync_webhook.sql'));
+            $notes[] = 'applied 005_sync_webhook.sql';
         }
 
         // 3. Add port_host to existing sessions and split host:port values.

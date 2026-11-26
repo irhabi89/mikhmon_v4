@@ -18,7 +18,7 @@ final class SyncRunRepository
         'status', 'phase', 'worker', 'month_key', 'expected_scripts', 'scanned_scripts',
         'router_records', 'imported', 'missing', 'extra', 'duplicates',
         'invalid', 'complete', 'cancel_requested', 'error', 'heartbeat_at',
-        'finished_at', 'started_at',
+        'finished_at', 'started_at', 'delete_after_import', 'deleted_router', 'delete_error',
     );
 
     public function __construct(Database $db)

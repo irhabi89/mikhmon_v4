@@ -96,7 +96,7 @@ function mikhmon_session_upsert($fields)
     }
     $allowed = array('name', 'ip_host', 'port_host', 'user_host', 'pass_host', 'hotspot_name',
         'dns_name', 'currency', 'areload', 'iface', 'infolp', 'idleto',
-        'live_report', 'raw');
+        'live_report', 'raw', 'webhook_url', 'webhook_token');
     $fields = array_intersect_key($fields, array_flip($allowed));
     if (empty($fields['name'])) {
         return false;

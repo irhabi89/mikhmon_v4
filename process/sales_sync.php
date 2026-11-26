@@ -60,7 +60,11 @@ try {
             echo json_encode($result, JSON_UNESCAPED_SLASHES);
             break;
         case 'start':
-            echo json_encode($service->start($session, array('month' => $month)), JSON_UNESCAPED_SLASHES);
+            $deleteAfterImport = isset($_POST['delete_after_import']) && (string)$_POST['delete_after_import'] === '1';
+            echo json_encode($service->start($session, array(
+                'month' => $month,
+                'delete_after_import' => $deleteAfterImport,
+            )), JSON_UNESCAPED_SLASHES);
             break;
         case 'pause':
         case 'cancel':

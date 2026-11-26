@@ -226,6 +226,32 @@ SQL;
         );
     }
 
+    /**
+     * Imported rows with their router script IDs, for optional cleanup after
+     * a successful manual import.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    public function importedWithIds(string $session, int $limit = 500): array
+    {
+        $limit = max(1, min(2000, $limit));
+        return $this->db->fetchAll(
+            "SELECT name, ros_script_id, script_comment, state
+               FROM sales_router_records
+              WHERE session = ? AND state = 'imported'
+              ORDER BY name LIMIT " . $limit,
+            array($session)
+        );
+    }
+
+    public function deleteOne(string $session, string $name): void
+    {
+        $this->db->execute(
+            'DELETE FROM sales_router_records WHERE session = ? AND name = ?',
+            array($session, $name)
+        );
+    }
+
     public function deleteBySession(string $session): int
     {
         return $this->db->execute('DELETE FROM sales_router_records WHERE session = ?', array($session));

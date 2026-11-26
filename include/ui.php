@@ -115,25 +115,24 @@ if (!function_exists('mikhmon_source_badge')) {
         if (!empty($status['in_sync'])) {
             return '<span class="mm-badge bg-green text-white"><i class="fa fa-check"></i> 100% Sinkron</span>';
         }
+        $unsynced = isset($status['unsynced']) ? (int)$status['unsynced'] : (int)($status['db']['missing'] ?? 0);
+        $unsyncedPct = array_key_exists('unsynced_percent', $status) ? $status['unsynced_percent'] : null;
+        $extra = isset($status['archive_extra']) ? $status['archive_extra'] : ($status['db']['extra'] ?? null);
+        $verified = !empty($status['verified']) || !empty($status['router']['complete']);
         $parts = array();
-        if ($status['coverage'] !== null) {
-            $parts[] = 'Tercakup ' . number_format((float)$status['coverage'], 1, ',', '.') . '%';
+        if ($unsyncedPct !== null) {
+            $parts[] = 'Belum tersinkron ' . number_format($unsynced, 0, ',', '.')
+                . ' (' . number_format((float)$unsyncedPct, 1, ',', '.') . '%)';
+        } else {
+            $parts[] = 'Belum diverifikasi';
         }
-        $missing = isset($status['db']['missing']) ? (int)$status['db']['missing'] : 0;
-        $extra = isset($status['db']['extra']) && $status['db']['extra'] !== null ? (int)$status['db']['extra'] : 0;
-        if ($missing > 0) {
-            $parts[] = number_format($missing, 0, ',', '.') . ' belum diimpor';
-        }
-        if ($extra > 0) {
-            $parts[] = number_format($extra, 0, ',', '.') . ' tidak ada di MikroTik';
-        }
-        if (empty($status['router']['complete'])) {
-            $parts[] = 'belum diverifikasi penuh';
+        if ($extra !== null && $extra > 0) {
+            $parts[] = number_format((int)$extra, 0, ',', '.') . ' arsip DB';
         }
         $class = 'bg-yellow text-dark';
-        if ($missing === 0 && $extra === 0 && !empty($status['router']['complete'])) {
+        if ($unsyncedPct !== null && $unsynced === 0) {
             $class = 'bg-blue text-white';
-        } elseif ($missing > 0) {
+        } elseif ($unsynced > 0) {
             $class = 'bg-orange text-white';
         }
         return '<span class="mm-badge ' . $class . '"><i class="fa fa-refresh"></i> ' . mikhmon_e(implode(' · ', $parts)) . '</span>';

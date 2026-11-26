@@ -210,11 +210,84 @@ $actions = $syncButton
       </form>
 
       <?php if ($data['total'] === 0): ?>
-        <?= mikhmon_empty_state(
-            'Belum ada data penjualan',
-            'Database belum berisi record untuk filter ini. Jalankan sinkronisasi untuk membaca semua script penjualan dari MikroTik.',
-            '<button type="button" class="btn bg-primary" onclick="location.href=\'#mmSyncModal\'"><i class="fa fa-refresh"></i> Sinkronisasi sekarang</button>'
-        ); ?>
+        <div id="mmLiveSales" class="mm-live-panel" data-session="<?= mikhmon_e($session); ?>">
+          <div class="mm-alert mm-alert-info">
+            <b><i class="fa fa-bolt"></i> Data langsung dari MikroTik.</b>
+            Database lokal belum berisi record untuk filter ini. Data dibaca read-only dan tidak diimpor otomatis.
+          </div>
+          <div class="mm-live-actions">
+            <span id="mmLiveInfo" class="mm-muted">Menghubungi router...</span>
+            <button type="button" class="btn bg-secondary" id="mmLiveStop" style="display:none;">Stop</button>
+          </div>
+          <div class="mm-progress"><span id="mmLiveBar"></span></div>
+          <div class="mm-table-wrap" id="mmLiveWrap" style="display:none;">
+            <table class="mm-table">
+              <thead><tr><th>No</th><th>Tanggal</th><th>Jam</th><th>Server</th><th>Username</th><th>Profil</th><th>Komentar</th><th class="is-num">Harga</th></tr></thead>
+              <tbody id="mmLiveBody"></tbody>
+            </table>
+          </div>
+          <p id="mmLiveEmpty" class="mm-muted" style="display:none;">Tidak ada record penjualan di MikroTik untuk filter ini.</p>
+        </div>
+        <script>
+        (function () {
+          var panel = document.getElementById('mmLiveSales');
+          if (!panel) { return; }
+          var info = document.getElementById('mmLiveInfo');
+          var bar = document.getElementById('mmLiveBar');
+          var body = document.getElementById('mmLiveBody');
+          var wrap = document.getElementById('mmLiveWrap');
+          var empty = document.getElementById('mmLiveEmpty');
+          var stop = document.getElementById('mmLiveStop');
+          var controller = new AbortController();
+          var rows = 0;
+          var url = './process/live_sales.php?' + location.search.replace(/^\?/, '');
+          function setInfo(text) { if (info) { info.textContent = text; } }
+          function append(row) {
+            rows++;
+            if (wrap) { wrap.style.display = ''; }
+            if (empty) { empty.style.display = 'none'; }
+            var tr = document.createElement('tr');
+            [String(rows), row.date_key, row.time_key, row.server_name, row.username, row.profile, row.sale_comment, 'Rp ' + Number(row.price || 0).toLocaleString('id-ID')].forEach(function (value) {
+              var td = document.createElement('td'); td.textContent = value || ''; tr.appendChild(td);
+            });
+            body.appendChild(tr);
+          }
+          if (stop) { stop.style.display = ''; stop.onclick = function () { controller.abort(); setInfo('Dihentikan. Data yang sudah tampil tetap ada.'); }; }
+          fetch(url, {credentials: 'same-origin', signal: controller.signal, headers: {'Accept': 'application/x-ndjson'}})
+            .then(function (response) {
+              if (!response.ok || !response.body) { throw new Error('HTTP ' + response.status); }
+              var reader = response.body.getReader();
+              var decoder = new TextDecoder();
+              var buffer = '';
+              function pump() {
+                return reader.read().then(function (part) {
+                  if (part.done) { return; }
+                  buffer += decoder.decode(part.value, {stream: true});
+                  var lines = buffer.split('\n'); buffer = lines.pop();
+                  lines.forEach(function (line) {
+                    if (!line.trim()) { return; }
+                    var event; try { event = JSON.parse(line); } catch (e) { return; }
+                    if (event.type === 'row') { append(event.data); }
+                    if (event.type === 'progress') { setInfo('Membaca ' + Number(event.rows).toLocaleString('id-ID') + ' record...'); if (bar) { bar.style.width = '35%'; } }
+                    if (event.type === 'done') {
+                      setInfo('Selesai: ' + Number(event.rows).toLocaleString('id-ID') + ' record dari MikroTik.');
+                      if (bar) { bar.style.width = '100%'; }
+                      if (!event.rows && empty) { empty.style.display = ''; }
+                      if (stop) { stop.style.display = 'none'; }
+                    }
+                    if (event.type === 'error') { setInfo('Gagal membaca MikroTik: ' + event.error); }
+                  });
+                  return pump();
+                });
+              }
+              return pump();
+            })
+            .catch(function (err) {
+              if (err && err.name === 'AbortError') { return; }
+              setInfo('Gagal membaca MikroTik: ' + err.message + '. Gunakan Sinkronisasi manual jika perlu.');
+            });
+        })();
+        </script>
       <?php else: ?>
         <div class="mm-table-wrap">
           <table class="mm-table">
@@ -261,7 +334,14 @@ $actions = $syncButton
     <div class="mm-progress"><span id="mmSyncBar"></span></div>
     <p class="mm-muted" style="font-size:12px;">
       Sinkronisasi membaca <b>semua</b> script MikroTik (bukan hanya satu halaman), lalu mengimpor per batch.
-      Proses berjalan di background; halaman tetap bisa dipakai.
+      Proses manual ini dapat dilanjutkan per batch.
+    </p>
+    <label style="display:block;font-weight:normal;margin:8px 0;">
+      <input type="checkbox" id="mmDeleteAfterImport" name="delete_after_import" value="1">
+      Setelah semua record penjualan berhasil diimpor, hapus <b>script record penjualan</b> dari MikroTik.
+    </label>
+    <p class="mm-muted" style="font-size:11.5px;margin-top:-4px;">
+      Hanya script record penjualan yang dihapus; script MikroTik lain tidak disentuh.
     </p>
     <div class="mm-page-actions">
       <button type="button" class="btn bg-primary" id="mmSyncStart"><i class="fa fa-play"></i> Mulai Sinkronisasi</button>
