@@ -8,12 +8,20 @@ data/config.php.bak
 # Composer / tooling
 /vendor/
 /.env
-/data/logs/
-/data/locks/
-/data/backups/
+/data/logs/*
+!/data/logs/.htaccess
+!/data/logs/.gitkeep
+/data/locks/*
+!/data/locks/.htaccess
+!/data/locks/.gitkeep
+/data/backups/*
+!/data/backups/.htaccess
+!/data/backups/.gitkeep
 /tests/tmp/
 /data/*.bak-*
 /data/*.db.backup
 /data/*.backup
 
-data/cache/
+data/cache/*
+!data/cache/.htaccess
+!data/cache/.gitkeep

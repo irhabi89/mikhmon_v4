@@ -25,7 +25,8 @@ License: **GPLv2** (original Mikhmon by Laksamadi Guko)
   dashboard async.
 - Sinkronisasi RouterOS bertahap/streaming dan rekonsiliasi data.
 
-Lihat [`CHANGELOG.md`](CHANGELOG.md), [`NOTICE.md`](NOTICE.md), dan
+Lihat [`CHANGELOG.md`](CHANGELOG.md), [`NOTICE.md`](NOTICE.md),
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md), dan
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) untuk detail.
 
 ---

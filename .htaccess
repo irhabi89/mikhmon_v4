@@ -1,0 +1,29 @@
+# MIKHMON v4 — GHAIB-NETWORK Edition
+# Apache/LiteSpeed deployment guard. Nginx users must mirror these denies in
+# the server block (see docs/DEPLOYMENT.md).
+Options -Indexes
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Internal application directories must never be fetched over HTTP.
+    RewriteRule ^(data|migrations|tests|vendor|src|bin|resources)(/|$) - [F,L]
+
+    # Secrets and tooling metadata.
+    RewriteRule ^(\.env|composer\.json|composer\.lock|phpunit\.xml|\.git)(/|$) - [F,L,NC]
+    RewriteRule ^\.(?!well-known) - [F,L]
+
+    # Database, logs and backup artifacts outside data/ as a second guard.
+    RewriteRule \.(db|db-wal|db-shm|sqlite|sqlite3|log|bak|backup)$ - [F,L,NC]
+</IfModule>
+
+# Apache 2.4 / 2.2 compatible deny for sensitive file types.
+<FilesMatch "\.(db|db-wal|db-shm|sqlite|sqlite3|log|bak|backup|env)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
