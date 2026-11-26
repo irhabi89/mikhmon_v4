@@ -31,6 +31,7 @@ if (session_status() === PHP_SESSION_NONE) session_start();
       </div>
       <div  class="text-center">
       <span style="font-size: 25px; margin: 10px;">MIKHMON</span>
+      <div class="mm-muted" style="font-size: 12px; letter-spacing: .04em;">GHAIB-NETWORK Edition</div>
       </div>
       <center>
       <form autocomplete="off" action="" method="post">
@@ -58,6 +59,10 @@ if (session_status() === PHP_SESSION_NONE) session_start();
       </table>
       </form>
       </center>
+      <div class="text-center mm-muted" style="font-size: 10.5px; margin-top: 12px; line-height: 1.4;">
+        Modified by <b>PT GHAIB-NETWORK</b> · Developer <b>quiqxiq</b><br>
+        <a href="https://www.ghaib.net/" target="_blank" rel="noopener">www.ghaib.net</a>
+      </div>
     </div>
   </div>
 </div>
