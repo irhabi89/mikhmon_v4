@@ -60,7 +60,26 @@ if ($livereport === 'disable') {
               <b><?= $_income ?? 'Income'; ?></b><br><span class="mm-muted">Live report dinonaktifkan.</span>
             <?php elseif (!empty($empty)): ?>
               <b><?= $_income ?? 'Income'; ?></b><br>
-              <span class="mm-muted">Belum ada data. <a href="./?report=selling&session=<?= mikhmon_e($session); ?>">Sinkronkan</a></span>
+              <span class="mm-muted" id="mmDashLiveStatus"><i class="fa fa-circle-o-notch fa-spin"></i> Membaca data live dari MikroTik…</span>
+              <div id="mmDashLiveValues" style="display:none;">
+                <span><?= $_today ?? 'Hari ini'; ?> : <b id="mmDashTodayValue">-</b></span>
+                <small class="mm-muted">(<span id="mmDashTodayCount">0</span> voucher)</small><br>
+                <span><?= $_this_month ?? 'Bulan ini'; ?> : <b id="mmDashMonthValue">-</b></span>
+                <small class="mm-muted">(<span id="mmDashMonthCount">0</span> voucher)</small><br>
+                <small class="mm-muted">Data live MikroTik — belum diimpor</small>
+              </div>
+              <script src="./js/live-income.js"></script>
+              <script>
+              (function () {
+                if (!window.MMLiveIncome) { return; }
+                MMLiveIncome.start({
+                  session: <?= json_encode((string)$session); ?>,
+                  currency: <?= json_encode((string)$currency); ?>,
+                  decimals: <?= (int)$decimals; ?>,
+                  statusId: 'mmDashLiveStatus'
+                });
+              })();
+              </script>
             <?php else: ?>
               <a href="./?report=selling&session=<?= mikhmon_e($session); ?>" style="color:inherit;text-decoration:none;" title="Lihat Laporan Penjualan">
                 <b><?= $_income ?? 'Income'; ?></b><br>

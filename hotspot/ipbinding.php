@@ -22,36 +22,21 @@ if (!isset($_SESSION["mikhmon"])) {
 	header("Location:../admin.php?id=login");
 } else {
 
-	$getbinding = $API->comm("/ip/hotspot/ip-binding/print");
-	$TotalReg = count($getbinding);
-
-	$countbinding = $TotalReg;
-
-	$allbindings = $getbinding;
-	$totalBindings = count($allbindings);
-	$page = \Mikhmon\Support\Pagination::page(isset($_GET['page']) ? $_GET['page'] : 1);
-	$perPage = \Mikhmon\Support\Pagination::perPage(isset($_GET['per_page']) ? $_GET['per_page'] : 50);
-	$pages = \Mikhmon\Support\Pagination::pages($totalBindings, $perPage);
-	if ($page > $pages) { $page = $pages; }
-	$getbinding = array_slice($allbindings, ($page - 1) * $perPage, $perPage);
-	$TotalReg = count($getbinding);
+	// Rows are streamed by process/live_hotspot.php so the page shell is instant.
+	$getbinding = array();
+	$TotalReg = 0;
+	$countbinding = 0;
+	$totalBindings = 0;
 	$baseUrl = $_SERVER['REQUEST_URI'];
 }
 
 ?>
 <div class="row">
-<div id="reloadbinding">
 <div class="col-12">
 <div class="card">
 <div class="card-header">
 	<h3><i class=" fa fa-address-book"></i> <?= $_ip_bindings ?> 
-<?php
-if ($countbinding < 2) {
-	echo "$countbinding item";
-} elseif ($countbinding > 1) {
-	echo "$countbinding items";
-};
-?>
+<span id="bindingCount"><?= (int)$countbinding; ?></span> items
     </h3>
 </div>
 <div class="card-body">	   
@@ -71,7 +56,7 @@ if ($countbinding < 2) {
     <th class="pointer" title="Click to sort"><i class="fa fa-sort"></i> Server</th>
   </tr>
   </thead>
-  <tbody> 
+  <tbody id="bindingBody"> 
 <?php
 for ($i = 0; $i < $TotalReg; $i++) {
 	$binding = $getbinding[$i];
@@ -112,7 +97,7 @@ for ($i = 0; $i < $TotalReg; $i++) {
 	?>
   </tbody>
 </table>
-<div class="mm-pagination-wrap"><?= mikhmon_pager($totalBindings, $page, $perPage, $baseUrl); ?><span class="mm-per-page"><?= mikhmon_per_page($perPage, $baseUrl); ?></span></div>
+<div id="bindingPager"></div>
 </div>
 </div>
 </div>
@@ -140,3 +125,5 @@ for ($i = 0; $i < $TotalReg; $i++) {
 </div>
 </div>
 </div>
+<script src="./js/progressive-hotspot.js"></script>
+<script>MMProgressiveHotspot.start({type:"ipbinding",session:<?= json_encode((string)$session); ?>,bodyId:"bindingBody",pagerId:"bindingPager",countId:"bindingCount",colspan:7});</script>

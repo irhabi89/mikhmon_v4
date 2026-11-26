@@ -96,7 +96,6 @@ $csvUrl = './process/export_sales.php?' . http_build_query(array_merge($baseQuer
         </div>
         <button class="btn bg-primary" type="submit"><i class="fa fa-search"></i> Filter</button>
         <a class="btn bg-secondary" href="./?report=userlog&session=<?= mikhmon_e($session); ?>"><i class="fa fa-eraser"></i> Reset</a>
-        <span class="mm-per-page"><?= mikhmon_per_page($data['perPage'], $baseUrl); ?></span>
       </form>
 
       <?php if ($data['total'] === 0): ?>

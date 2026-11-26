@@ -311,10 +311,7 @@ for ($i = 0; $i < $TotalReg; $i++) {
   </tbody>
 </table>
 </div>
-<div class="mm-pagination-wrap" id="mmUsersPager">
-  <?= mikhmon_pager($totalUsers, $page, $perPage, $baseUrl); ?>
-  <span class="mm-per-page"><?= mikhmon_per_page($perPage, $baseUrl); ?></span>
-</div>
+<div id="mmUsersPager"><?= mikhmon_pager($totalUsers, $page, $perPage, $baseUrl); ?></div>
 <script>
 (function () {
   var progressive = <?= !empty($progressiveUsers) ? 'true' : 'false'; ?>;
@@ -361,9 +358,17 @@ for ($i = 0; $i < $TotalReg; $i++) {
     if (countEl) { countEl.textContent = rows.length.toLocaleString('id-ID'); }
     if (loader) { loader.style.display = 'none'; }
     if (pager) {
-      var pages = Math.max(1, Math.ceil(rows.length / perPage));
-      pager.innerHTML = pages > 1 ? '<button type="button" class="mm-page-btn" data-page="' + (page - 1) + '"' + (page <= 1 ? ' disabled' : '') + '>&laquo;</button><span class="mm-page-current">Halaman ' + page + ' / ' + pages + '</span><button type="button" class="mm-page-btn" data-page="' + (page + 1) + '"' + (page >= pages ? ' disabled' : '') + '>&raquo;</button><span class="mm-muted">' + rows.length.toLocaleString('id-ID') + ' user</span>' : '';
-      pager.querySelectorAll('button[data-page]').forEach(function (btn) { btn.onclick = function () { var n = Number(btn.getAttribute('data-page')); if (n >= 1 && n <= pages) { page = n; renderPage(); } }; });
+      if (!rows.length) { pager.innerHTML = ''; }
+      else {
+        var pages = Math.max(1, Math.ceil(rows.length / perPage));
+        var from = ((page - 1) * perPage) + 1;
+        var to = Math.min(rows.length, page * perPage);
+        var opts = [25, 50, 100, 200].map(function (size) { return '<option value="' + size + '"' + (size === perPage ? ' selected' : '') + '>' + size + '</option>'; }).join('');
+        pager.innerHTML = '<div class="mm-pagination-wrap"><span class="mm-page-info">Menampilkan <b>' + from.toLocaleString('id-ID') + '–' + to.toLocaleString('id-ID') + '</b> dari <b>' + rows.length.toLocaleString('id-ID') + '</b></span><div class="mm-pagination-tools"><label class="mm-per-page">Baris <select data-per-page>' + opts + '</select></label><nav class="mm-pagination"><button type="button" class="mm-page-btn" data-page="' + (page - 1) + '"' + (page <= 1 ? ' disabled' : '') + '>&laquo;</button><span class="mm-page-info">Halaman ' + page + ' / ' + pages + '</span><button type="button" class="mm-page-btn" data-page="' + (page + 1) + '"' + (page >= pages ? ' disabled' : '') + '>&raquo;</button></nav></div></div>';
+        var sel = pager.querySelector('[data-per-page]');
+        if (sel) { sel.onchange = function () { perPage = Number(sel.value) || 50; page = 1; renderPage(); }; }
+        pager.querySelectorAll('button[data-page]').forEach(function (btn) { btn.onclick = function () { var n = Number(btn.getAttribute('data-page')); if (n >= 1 && n <= pages) { page = n; renderPage(); } }; });
+      }
     }
   }
   function schedule() { if (pending) { return; } pending = setTimeout(function () { pending = 0; renderPage(); }, 150); }

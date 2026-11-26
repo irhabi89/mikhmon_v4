@@ -40,16 +40,24 @@ if (!isset($_SESSION["mikhmon"])) {
 	$API = new RouterosAPI();
 	$API->debug = false;
 	$API->connect($iphost, $userhost, decrypt($passwdhost));
+	$activeOk = $API->connected;
+	if (!$activeOk) {
+		echo '<div class="alert bg-danger text-white" role="alert"><b><i class="fa fa-exclamation-triangle"></i> Gagal memuat hotspot aktif.</b> Data terakhir dipertahankan. Periksa koneksi router.</div>';
+	}
 
-	if ($serveractive != "") {
+	if ($activeOk && $serveractive != "") {
 		$gethotspotactive = $API->comm("/ip/hotspot/active/print", array("?server" => "" . $serveractive . ""));
 		$TotalReg = count($gethotspotactive);
 		$counthotspotactive = $TotalReg;
 
-	} else {
+	} elseif ($activeOk) {
 		$gethotspotactive = $API->comm("/ip/hotspot/active/print");
 		$TotalReg = count($gethotspotactive);
 		$counthotspotactive = $TotalReg;
+	} else {
+		$gethotspotactive = array();
+		$TotalReg = 0;
+		$counthotspotactive = 0;
 	}
 
 	$allactive = $gethotspotactive;
@@ -64,7 +72,6 @@ if (!isset($_SESSION["mikhmon"])) {
 }
 ?>
 <div class="row">
-<div id="reloadHotspotActive">
 <div class="col-12">
 	<div class="card">
 		<div class="card-header">
@@ -84,7 +91,7 @@ if (!isset($_SESSION["mikhmon"])) {
 				}
 				?>			</h3>
         </div>
-         <div class="card-body overflow">
+         <div class="card-body overflow" data-active-ok="<?= $activeOk ? '1' : '0'; ?>">
 <table id="tFilter" class="table table-bordered table-hover text-nowrap">
   <thead>
   <tr>
@@ -135,10 +142,7 @@ for ($i = 0; $i < $TotalReg; $i++) {
   </tbody>
 </table>
 </div>
-<div class="mm-pagination-wrap">
-  <?= mikhmon_pager($totalActive, $page, $perPage, $baseUrl); ?>
-  <span class="mm-per-page"><?= mikhmon_per_page($perPage, $baseUrl); ?></span>
-</div>
+<?= mikhmon_pager($totalActive, $page, $perPage, $baseUrl); ?>
 </div>
 </div>
 </div>

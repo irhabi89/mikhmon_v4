@@ -217,6 +217,13 @@ body.mm-theme-blue { --mm-primary: #20a8d8; }
 }
 
 .mm-page-info { color: var(--mm-muted); font-size: 12px; }
+.mm-pagination-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
 
 .mm-pagination {
   display: flex;
@@ -314,6 +321,7 @@ body.mm-theme-blue { --mm-primary: #20a8d8; }
   .mm-field { min-width: 0; flex: 1 1 140px; }
   .mm-input, .mm-select { width: 100%; min-width: 0; }
   .mm-pagination-wrap { flex-direction: column; align-items: flex-start; }
+  .mm-pagination-tools { width: 100%; justify-content: space-between; }
 }
 
 @media print {

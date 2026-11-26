@@ -241,22 +241,39 @@ if ($livereport == "enable" || $livereport == "") {
     }
 </script>';
 
-} elseif ($hotspot == "active" && $serveractive != "") {
-  echo '<script>
-  $(document).ready(function(){
+} elseif ($hotspot == "active") {
+  echo '<style>#mmActiveReloadError{display:none;margin:8px 0;}</style>
+  <div id="mmActiveReloadError" class="alert bg-danger text-white"></div>
+  <script>
+  (function () {
+    var wrap = document.getElementById("reloadHotspotActive");
+    if (!wrap) { return; }
+    var loading = false;
     var interval = "' . $reload_interval . '";
-    setInterval(function() {
-    $("#reloadHotspotActive").load("./hotspot/hotspotactive.php?server=' . $serveractive . '&session=' . $session . '"); }, interval);})
-</script>
-';
-} elseif ($hotspot == "active" && $serveractive == "") {
-  echo '<script>
-  $(document).ready(function(){
-    var interval = "' . $reload_interval . '";
-    setInterval(function() {
-    $("#reloadHotspotActive").load("./hotspot/hotspotactive.php?session=' . $session . '"); }, interval);})
-</script>
-';
+    function showError(message) {
+      var el = document.getElementById("mmActiveReloadError");
+      if (el) { el.style.display = ""; el.innerHTML = "<b><i class=\"fa fa-exclamation-triangle\"></i> Gagal memperbarui hotspot aktif.</b> " + String(message || "Data terakhir dipertahankan."); }
+    }
+    function reload() {
+      if (loading || document.hidden) { return; }
+      loading = true;
+      fetch("./hotspot/hotspotactive.php" + location.search, {credentials: "same-origin", headers: {"Accept": "text/html"}})
+        .then(function (response) {
+          if (!response.ok) { throw new Error("HTTP " + response.status); }
+          return response.text();
+        })
+        .then(function (html) {
+          if (html.indexOf("data-active-ok=\"1\"") === -1) { throw new Error("Router tidak terhubung"); }
+          wrap.innerHTML = html;
+          var el = document.getElementById("mmActiveReloadError");
+          if (el) { el.style.display = "none"; el.innerHTML = ""; }
+        })
+        .catch(function (err) { showError(err.message); })
+        .finally(function () { loading = false; });
+    }
+    setInterval(reload, interval);
+  })();
+  </script>';
 } elseif ($userprofile == "add" || substr($userprofile, 0, 1) == "*" || $userprofile != "") {
   echo "<script>
   //enable disable input on ready

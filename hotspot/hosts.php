@@ -22,34 +22,11 @@ if (!isset($_SESSION["mikhmon"])) {
 	header("Location:../admin.php?id=login");
 } else {
 
-	if ($hotspot == "hostp") {
-		$gethosts = $API->comm("/ip/hotspot/host/print", array(
-			"?bypassed" => "yes",
-		));
-		$TotalReg = count($gethosts);
-		$counthosts = $TotalReg;
-
-	} elseif ($hotspot == "hosta") {
-		$gethosts = $API->comm("/ip/hotspot/host/print", array(
-			"?authorized" => "yes",
-		));
-		$TotalReg = count($gethosts);
-		$counthosts = $TotalReg;
-
-	} else {
-		$gethosts = $API->comm("/ip/hotspot/host/print");
-		$TotalReg = count($gethosts);
-		$counthosts = $TotalReg;
-	}
-
-	$allhosts = $gethosts;
-	$totalHosts = count($allhosts);
-	$page = \Mikhmon\Support\Pagination::page(isset($_GET['page']) ? $_GET['page'] : 1);
-	$perPage = \Mikhmon\Support\Pagination::perPage(isset($_GET['per_page']) ? $_GET['per_page'] : 50);
-	$pages = \Mikhmon\Support\Pagination::pages($totalHosts, $perPage);
-	if ($page > $pages) { $page = $pages; }
-	$gethosts = array_slice($allhosts, ($page - 1) * $perPage, $perPage);
-	$TotalReg = count($gethosts);
+	// Rows are streamed by process/live_hotspot.php so the page shell is instant.
+	$gethosts = array();
+	$TotalReg = 0;
+	$counthosts = 0;
+	$totalHosts = 0;
 	$baseUrl = $_SERVER['REQUEST_URI'];
 }
 ?>
@@ -58,13 +35,7 @@ if (!isset($_SESSION["mikhmon"])) {
 <div class="card">
 <div class="card-header align-middle">
 	<h3><i class="fa fa-laptop"></i> Hosts  
-		<?php
-	if ($counthosts < 2) {
-		echo "$counthosts item";
-	} elseif ($counthosts > 1) {
-		echo "$counthosts items ";
-	};
-	?>&nbsp;
+		<span id="hostCount"><?= (int)$counthosts; ?></span> items&nbsp;
 		 | <a class="text-info" title="All" href="./?hotspot=hosts&session=<?= $session; ?>">&nbsp;&nbsp;All&nbsp;&nbsp;</a>
 		 | <a class="text-success" title="Authorized" href="./?hotspot=hosta&session=<?= $session; ?>">&nbsp;&nbsp;A&nbsp;&nbsp;</a>
 		 | <a class="text-primary" title="Bypassed" href="./?hotspot=hostp&session=<?= $session; ?>">&nbsp;&nbsp;P&nbsp;&nbsp;</a>
@@ -88,7 +59,7 @@ if (!isset($_SESSION["mikhmon"])) {
     <th class="pointer" title="Click to sort"><i class="fa fa-sort"></i> Server</th>
 	<th class="pointer" title="Click to sort"><i class="fa fa-sort"></i> <?= $_comment ?></th>
   </thead>
-  <tbody>  	
+  <tbody id="hostBody">  	
 <?php
 for ($i = 0; $i < $TotalReg; $i++) {
 	$hosts = $gethosts[$i];
@@ -130,9 +101,11 @@ for ($i = 0; $i < $TotalReg; $i++) {
 ?>
   </tbody>
 </table>
-<div class="mm-pagination-wrap"><?= mikhmon_pager($totalHosts, $page, $perPage, $baseUrl); ?><span class="mm-per-page"><?= mikhmon_per_page($perPage, $baseUrl); ?></span></div>
+<div id="hostPager"></div>
 </div>
 </div>
 </tr>
 </div>
 </div>
+<script src="./js/progressive-hotspot.js"></script>
+<script>MMProgressiveHotspot.start({type:"hosts",session:<?= json_encode((string)$session); ?>,bodyId:"hostBody",pagerId:"hostPager",countId:"hostCount",colspan:7});</script>

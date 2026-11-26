@@ -206,7 +206,6 @@ $actions = $syncButton
         </div>
         <button class="btn bg-primary" type="submit"><i class="fa fa-search"></i> Filter</button>
         <a class="btn bg-secondary" href="./?report=selling&session=<?= mikhmon_e($session); ?>"><i class="fa fa-eraser"></i> Reset</a>
-        <span class="mm-per-page"><?= mikhmon_per_page($data['perPage'], $baseUrl); ?></span>
       </form>
 
       <?php if ($data['total'] === 0): ?>
@@ -219,14 +218,13 @@ $actions = $syncButton
             <span id="mmLiveInfo" class="mm-muted">Menghubungi router...</span>
             <button type="button" class="btn bg-secondary" id="mmLiveStop" style="display:none;">Stop</button>
           </div>
-          <div class="mm-progress"><span id="mmLiveBar"></span></div>
           <div class="mm-table-wrap" id="mmLiveWrap" style="display:none;">
             <table class="mm-table">
               <thead><tr><th>No</th><th>Tanggal</th><th>Jam</th><th>Server</th><th>Username</th><th>Profil</th><th>Komentar</th><th class="is-num">Harga</th></tr></thead>
               <tbody id="mmLiveBody"></tbody>
             </table>
           </div>
-          <div id="mmLivePager" class="mm-pagination-wrap" style="display:none;"></div>
+          <div id="mmLivePager" style="display:none;"></div>
           <p id="mmLiveEmpty" class="mm-muted" style="display:none;">Tidak ada record penjualan di MikroTik untuk filter ini.</p>
         </div>
         <script>
@@ -234,7 +232,6 @@ $actions = $syncButton
           var panel = document.getElementById('mmLiveSales');
           if (!panel) { return; }
           var info = document.getElementById('mmLiveInfo');
-          var bar = document.getElementById('mmLiveBar');
           var body = document.getElementById('mmLiveBody');
           var wrap = document.getElementById('mmLiveWrap');
           var empty = document.getElementById('mmLiveEmpty');
@@ -255,13 +252,21 @@ $actions = $syncButton
           function setInfo(text) { if (info) { info.textContent = text; } }
           function renderPager() {
             if (!pager) { return; }
+            if (!allRows.length) { pager.style.display = 'none'; pager.innerHTML = ''; return; }
             var pages = Math.max(1, Math.ceil(allRows.length / perPage));
-            if (pages <= 1) { pager.style.display = 'none'; pager.innerHTML = ''; return; }
+            var from = ((page - 1) * perPage) + 1;
+            var to = Math.min(allRows.length, page * perPage);
             pager.style.display = '';
-            pager.innerHTML = '<button type="button" class="mm-page-btn" data-page="' + (page - 1) + '"' + (page <= 1 ? ' disabled' : '') + '>&laquo;</button>' +
-              '<span class="mm-page-current">Halaman ' + page + ' / ' + pages + '</span>' +
-              '<button type="button" class="mm-page-btn" data-page="' + (page + 1) + '"' + (page >= pages ? ' disabled' : '') + '>&raquo;</button>' +
-              '<span class="mm-muted">' + allRows.length.toLocaleString('id-ID') + ' record</span>';
+            var opts = [25, 50, 100, 200].map(function (size) {
+              return '<option value="' + size + '"' + (size === perPage ? ' selected' : '') + '>' + size + '</option>';
+            }).join('');
+            pager.innerHTML = '<div class="mm-pagination-wrap"><span class="mm-page-info">Menampilkan <b>' + from.toLocaleString('id-ID') + '–' + to.toLocaleString('id-ID') + '</b> dari <b>' + allRows.length.toLocaleString('id-ID') + '</b></span>' +
+              '<div class="mm-pagination-tools"><label class="mm-per-page">Baris <select data-per-page>' + opts + '</select></label>' +
+              '<nav class="mm-pagination"><button type="button" class="mm-page-btn" data-page="' + (page - 1) + '"' + (page <= 1 ? ' disabled' : '') + '>&laquo;</button>' +
+              '<span class="mm-page-info">Halaman ' + page + ' / ' + pages + '</span>' +
+              '<button type="button" class="mm-page-btn" data-page="' + (page + 1) + '"' + (page >= pages ? ' disabled' : '') + '>&raquo;</button></nav></div></div>';
+            var sel = pager.querySelector('[data-per-page]');
+            if (sel) { sel.onchange = function () { perPage = Number(sel.value) || 50; page = 1; renderPage(); }; }
             pager.querySelectorAll('button[data-page]').forEach(function (btn) {
               btn.onclick = function () { var next = Number(btn.getAttribute('data-page')); if (next >= 1 && next <= pages) { page = next; renderPage(); } };
             });
@@ -321,10 +326,9 @@ $actions = $syncButton
                     if (!line.trim()) { return; }
                     var event; try { event = JSON.parse(line); } catch (e) { return; }
                     if (event.type === 'row') { allRows.push(event.data); scheduleRender(); }
-                    if (event.type === 'progress') { setInfo('Membaca ' + Number(event.rows).toLocaleString('id-ID') + ' record...'); if (bar) { bar.style.width = '45%'; } }
+                    if (event.type === 'progress') { setInfo('Membaca ' + Number(event.rows).toLocaleString('id-ID') + ' record...'); }
                     if (event.type === 'done') {
                       setInfo('Selesai: ' + Number(event.rows).toLocaleString('id-ID') + ' record dari MikroTik.');
-                      if (bar) { bar.style.width = '100%'; }
                       renderPage();
                       if (stop) { stop.style.display = 'none'; }
                     }

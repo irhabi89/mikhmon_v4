@@ -194,7 +194,9 @@ elseif ($removeexpiredhotspotuser != "") {
     $_SESSION['ubp'] = "";
     $_SESSION['hua'] = "hotspotactive";
     $_SESSION['ubc'] = "";
+    echo '<div id="reloadHotspotActive">';
     include_once('./hotspot/hotspotactive.php');
+    echo '</div>';
   }
 
 // dhcp leases

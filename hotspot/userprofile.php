@@ -168,7 +168,7 @@ for ($i = 0; $i < $TotalReg; $i++) {
 ?>
   </tbody>
 </table>
-<div class="mm-pagination-wrap"><?= mikhmon_pager($totalProfiles, $page, $perPage, $baseUrl); ?><span class="mm-per-page"><?= mikhmon_per_page($perPage, $baseUrl); ?></span></div>
+<?= mikhmon_pager($totalProfiles, $page, $perPage, $baseUrl); ?>
 </div>
 </div>
 </div>

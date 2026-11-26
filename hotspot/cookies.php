@@ -22,19 +22,11 @@ if (!isset($_SESSION["mikhmon"])) {
 	header("Location:../admin.php?id=login");
 } else {
 
-	$getcookies = $API->comm("/ip/hotspot/cookie/print");
-	$TotalReg = count($getcookies);
-
-	$countcookies = $TotalReg;
-
-	$allcookies = $getcookies;
-	$totalCookies = count($allcookies);
-	$page = \Mikhmon\Support\Pagination::page(isset($_GET['page']) ? $_GET['page'] : 1);
-	$perPage = \Mikhmon\Support\Pagination::perPage(isset($_GET['per_page']) ? $_GET['per_page'] : 50);
-	$pages = \Mikhmon\Support\Pagination::pages($totalCookies, $perPage);
-	if ($page > $pages) { $page = $pages; }
-	$getcookies = array_slice($allcookies, ($page - 1) * $perPage, $perPage);
-	$TotalReg = count($getcookies);
+	// Rows are streamed by process/live_hotspot.php so the page shell is instant.
+	$getcookies = array();
+	$TotalReg = 0;
+	$countcookies = 0;
+	$totalCookies = 0;
 	$baseUrl = $_SERVER['REQUEST_URI'];
 }
 ?>
@@ -43,14 +35,7 @@ if (!isset($_SESSION["mikhmon"])) {
 <div class="card">
 <div class="card-header">
 	<h3><i class=" fa fa-sitemap"></i> Hotspot Cookies 
-<?php
-if ($countcookies < 2) {
-	echo "$countcookies item";
-} elseif ($countcookies > 1) {
-	echo "$countcookies items";
-};
-echo "</th>";
-?>
+<span id="cookieCount"><?= (int)$countcookies; ?></span> items</th>
 &nbsp;&nbsp; | &nbsp;&nbsp;<i onclick="location.reload();" class="fa fa-refresh pointer" title="Reload data"></i>
     </h3>
 </div>
@@ -69,7 +54,7 @@ echo "</th>";
     <th class="pointer" title="Click to sort"><i class="fa fa-sort"></i> Expires In</th>
   </tr>
   </thead>
-  <tbody> 
+  <tbody id="cookieBody"> 
 <?php
 for ($i = 0; $i < $TotalReg; $i++) {
 	$cookies = $getcookies[$i];
@@ -92,10 +77,12 @@ for ($i = 0; $i < $TotalReg; $i++) {
 ?>
   </tbody>
 </table>
-<div class="mm-pagination-wrap"><?= mikhmon_pager($totalCookies, $page, $perPage, $baseUrl); ?><span class="mm-per-page"><?= mikhmon_per_page($perPage, $baseUrl); ?></span></div>
+<div id="cookiePager"></div>
 </div>
 </div>
 </div>
 </div>
 </div>
 </div>
+<script src="./js/progressive-hotspot.js"></script>
+<script>MMProgressiveHotspot.start({type:"cookies",session:<?= json_encode((string)$session); ?>,bodyId:"cookieBody",pagerId:"cookiePager",countId:"cookieCount",colspan:5});</script>

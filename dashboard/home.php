@@ -401,24 +401,22 @@ if (!isset($_SESSION["mikhmon"])) {
                           ?>                       
                         </div>
                         <?php if (isset($stats_home) && (int)$stats_home['total_count'] === 0): ?>
+                        <script src="./js/live-income.js"></script>
                         <script>
                         (function () {
                           var box = document.getElementById('reloadLreport');
-                          if (!box) { return; }
-                          box.innerHTML = '<span class="mm-muted"><i class="fa fa-circle-o-notch fa-spin"></i> Membaca penjualan live dari MikroTik...</span>';
-                          fetch('./process/live_sales.php?summary=1&session=' + encodeURIComponent(<?= json_encode((string)$session); ?>), {credentials: 'same-origin'})
-                            .then(function (r) { return r.text(); })
-                            .then(function (text) {
-                              var data = JSON.parse((text || '').trim().split('\n').pop());
-                              if (!data || !data.ok) { throw new Error((data && data.error) || 'gagal'); }
-                              var s = data.summary;
-                              var money = function (v) { return <?= json_encode((string)$currency); ?> + ' ' + Number(v || 0).toLocaleString('id-ID', {maximumFractionDigits: <?= (int)$price_decimals; ?>}); };
-                              box.innerHTML = '<b>Data live MikroTik</b><br/>' +
-                                <?= json_encode((string)$_today); ?> + ' : <b>' + money(s.today_sum) + '</b> <small>(' + Number(s.today_count).toLocaleString('id-ID') + ' voucher)</small><br/>' +
-                                <?= json_encode((string)$_this_month); ?> + ' : <b>' + money(s.month_sum) + '</b> <small>(' + Number(s.month_count).toLocaleString('id-ID') + ' voucher)</small><br/>' +
-                                '<a href="./?report=selling&session=' + encodeURIComponent(<?= json_encode((string)$session); ?>) + '" class="mm-muted" style="font-size:11px;">Belum diimpor ke database — lihat laporan live</a>';
-                            })
-                            .catch(function (err) { box.innerHTML = '<span class="text-red">Data live gagal dimuat: ' + String(err.message) + '</span>'; });
+                          if (!box || !window.MMLiveIncome) { return; }
+                          box.innerHTML = '<span class="mm-muted" id="mmDashLiveStatus"><i class="fa fa-circle-o-notch fa-spin"></i> Membaca data live dari MikroTik…</span>' +
+                            '<div id="mmDashLiveValues" style="display:none;">' +
+                            <?= json_encode((string)$_today); ?> + ' : <b id="mmDashTodayValue">-</b> <small class="mm-muted">(<span id="mmDashTodayCount">0</span> voucher)</small><br>' +
+                            <?= json_encode((string)$_this_month); ?> + ' : <b id="mmDashMonthValue">-</b> <small class="mm-muted">(<span id="mmDashMonthCount">0</span> voucher)</small><br>' +
+                            '<small class="mm-muted">Data live MikroTik — belum diimpor</small></div>';
+                          MMLiveIncome.start({
+                            session: <?= json_encode((string)$session); ?>,
+                            currency: <?= json_encode((string)$currency); ?>,
+                            decimals: <?= (int)$price_decimals; ?>,
+                            statusId: 'mmDashLiveStatus'
+                          });
                         })();
                         </script>
                         <?php endif; ?>

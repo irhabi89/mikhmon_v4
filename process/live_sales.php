@@ -29,6 +29,7 @@ if ($session === '') {
     exit;
 }
 $summaryMode = isset($_GET['summary']) && (string)$_GET['summary'] === '1';
+$streamSummary = $summaryMode && isset($_GET['stream']) && (string)$_GET['stream'] === '1';
 $meta = \Mikhmon\Support\SalesFilter::fromQuery($_GET);
 $filter = $meta['filter'];
 
@@ -79,7 +80,13 @@ try {
         $summary['total_sum'] += $price;
         if (($parsed['date_key'] ?? '') === $today) { $summary['today_count']++; $summary['today_sum'] += $price; }
         if (($parsed['month_key'] ?? '') === $month) { $summary['month_count']++; $summary['month_sum'] += $price; }
-        if ($summaryMode) { return true; }
+        if ($summaryMode) {
+            if ($streamSummary && $count % 100 === 0) {
+                echo json_encode(array('type' => 'progress', 'rows' => $count, 'today_count' => $summary['today_count'], 'month_count' => $summary['month_count'])) . "\n";
+                flush();
+            }
+            return true;
+        }
         echo json_encode(array('type' => 'row', 'data' => array(
             'date_key' => (string)($parsed['date_key'] ?? ''),
             'time_key' => (string)($parsed['time_key'] ?? ''),
@@ -95,7 +102,12 @@ try {
     }, 120.0);
     $client->close();
     if ($summaryMode) {
-        echo json_encode(array('ok' => true, 'source' => 'router', 'count' => $count, 'summary' => $summary)) . "\n";
+        if ($streamSummary) {
+            echo json_encode(array('type' => 'summary', 'ok' => true, 'source' => 'router', 'count' => $count, 'summary' => $summary)) . "\n";
+            echo json_encode(array('type' => 'done', 'rows' => $count, 'complete' => $result->ok, 'error' => $result->error)) . "\n";
+        } else {
+            echo json_encode(array('ok' => true, 'source' => 'router', 'count' => $count, 'summary' => $summary)) . "\n";
+        }
     } else {
         echo json_encode(array('type' => 'done', 'rows' => $count, 'complete' => $result->ok, 'error' => $result->error)) . "\n";
     }

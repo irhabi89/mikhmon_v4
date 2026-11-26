@@ -56,13 +56,21 @@ if (!function_exists('mikhmon_url')) {
 if (!function_exists('mikhmon_pager')) {
     function mikhmon_pager(int $total, int $page, int $perPage, string $baseUrl): string
     {
+        if ($total <= 0) {
+            return '';
+        }
         $pages = Pagination::pages($total, $perPage);
         $page = min(max(1, $page), $pages);
-        $from = $total > 0 ? (($page - 1) * $perPage) + 1 : 0;
+        $from = (($page - 1) * $perPage) + 1;
         $to = min($total, $page * $perPage);
         $out = '<div class="mm-pagination-wrap">';
         $out .= '<span class="mm-page-info">Menampilkan <b>' . number_format($from, 0, ',', '.') . '–' . number_format($to, 0, ',', '.') . '</b> dari <b>' . number_format($total, 0, ',', '.') . '</b></span>';
-        $out .= '<nav class="mm-pagination" aria-label="Pagination">';
+        $out .= '<div class="mm-pagination-tools"><label class="mm-per-page">Baris <select onchange="if(this.value){location.href=this.value;}">';
+        foreach (Pagination::SIZES as $size) {
+            $url = mikhmon_url($baseUrl, array('per_page' => $size, 'page' => 1));
+            $out .= '<option value="' . mikhmon_e($url) . '"' . ($size === $perPage ? ' selected' : '') . '>' . $size . '</option>';
+        }
+        $out .= '</select></label><nav class="mm-pagination" aria-label="Pagination">';
         if ($page > 1) {
             $out .= '<a class="mm-page-btn" href="' . mikhmon_e(mikhmon_url($baseUrl, array('page' => 1, 'per_page' => $perPage))) . '" aria-label="Halaman pertama">&laquo;</a>';
             $out .= '<a class="mm-page-btn" href="' . mikhmon_e(mikhmon_url($baseUrl, array('page' => $page - 1, 'per_page' => $perPage))) . '" aria-label="Halaman sebelumnya">&lsaquo;</a>';
@@ -87,7 +95,7 @@ if (!function_exists('mikhmon_pager')) {
         } else {
             $out .= '<span class="mm-page-btn is-disabled">&rsaquo;</span><span class="mm-page-btn is-disabled">&raquo;</span>';
         }
-        return $out . '</nav></div>';
+        return $out . '</nav></div></div>';
     }
 }
 
