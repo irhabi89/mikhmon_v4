@@ -230,7 +230,11 @@ location ^~ /migrations/ { deny all; }
 location ~ /\.(?!well-known) { deny all; }
 ```
 
-## 10. Cron sync (recommended)
+## 10. Cron sync (optional)
+
+The application does **not** start automatic sync by default. Add a cron only
+if you intentionally want scheduled sync; otherwise skip this section and use
+the manual Sync button.
 
 Use cPanel → Cron Jobs, or `crontab -e`:
 
