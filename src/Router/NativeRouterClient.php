@@ -62,7 +62,15 @@ final class NativeRouterClient implements RouterClientInterface
     public function count(string $command, array $queries = array()): int
     {
         $this->assertConnected();
-        return $this->api->countOnly($command, $queries);
+        // A count-only request must not block a sync worker for the full scan
+        // deadline when the router stops responding.
+        $old = (int)$this->api->read_timeout;
+        $this->api->read_timeout = min($old, 30);
+        try {
+            return $this->api->countOnly($command, $queries);
+        } finally {
+            $this->api->read_timeout = $old;
+        }
     }
 
     public function stream(string $command, array $attributes, callable $onRow, ?float $timeout = null): ScanResult

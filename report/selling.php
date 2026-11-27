@@ -210,10 +210,6 @@ $actions = $syncButton
 
       <?php if ($data['total'] === 0): ?>
         <div id="mmLiveSales" class="mm-live-panel" data-session="<?= mikhmon_e($session); ?>">
-          <div class="mm-alert mm-alert-info">
-            <b><i class="fa fa-bolt"></i> Data langsung dari MikroTik.</b>
-            Database lokal belum berisi record untuk filter ini. Data dibaca read-only dan tidak diimpor otomatis.
-          </div>
           <div class="mm-live-actions">
             <span id="mmLiveInfo" class="mm-muted">Menghubungi router...</span>
             <button type="button" class="btn bg-secondary" id="mmLiveStop" style="display:none;">Stop</button>
@@ -320,6 +316,8 @@ $actions = $syncButton
                     if (event.type === 'progress') { setInfo('Membaca ' + Number(event.rows).toLocaleString('id-ID') + ' record...'); }
                     if (event.type === 'done') {
                       setInfo('Selesai: ' + Number(event.rows).toLocaleString('id-ID') + ' record dari MikroTik.');
+                      window.MM_LIVE_COUNT = Number(event.rows) || 0;
+                      document.dispatchEvent(new CustomEvent('mm-live-sales-loaded', {detail: {count: window.MM_LIVE_COUNT}}));
                       renderPage();
                       if (stop) { stop.style.display = 'none'; }
                     }

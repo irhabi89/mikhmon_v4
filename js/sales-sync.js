@@ -75,8 +75,13 @@
     var db = data.db || {};
     var run = data.run || null;
 
+    var liveCount = Number(window.MM_LIVE_COUNT || 0);
     if (info) {
       var parts = [];
+      if (liveCount > 0 && !Number(db.total || 0) && !run) {
+        info.innerHTML = "MikroTik live: <b>" + fmt(liveCount) + "</b> record &nbsp;|&nbsp; Database: <b>0</b> &nbsp;|&nbsp; <b class='text-orange'>Belum diimpor</b>";
+        return;
+      }
       parts.push("MikroTik: <b>" + (router.records != null ? fmt(router.records) : "?") + "</b> record");
       if (Number(router.scanned_scripts || 0) > 0) { parts.push("Scan: <b>" + fmt(router.scanned_scripts) + "</b> script"); }
       parts.push("Database: <b>" + fmt(db.total) + "</b> transaksi");
@@ -270,6 +275,16 @@
       }
     }).catch(function (err) { showError(err.message); });
   }
+
+  document.addEventListener("mm-live-sales-loaded", function (event) {
+    if (running || polling) { return; }
+    var info = $("mmSyncInfo");
+    if (!info) { return; }
+    var count = Number(event.detail && event.detail.count ? event.detail.count : 0);
+    if (count > 0) {
+      info.innerHTML = "MikroTik live: <b>" + fmt(count) + "</b> record &nbsp;|&nbsp; Database: <b>0</b> &nbsp;|&nbsp; <b class='text-orange'>Belum diimpor</b>";
+    }
+  });
 
   document.addEventListener("DOMContentLoaded", function () {
     var startBtn = $("mmSyncStart");
