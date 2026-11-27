@@ -56,6 +56,21 @@ PHP_BIN=/usr/local/bin/php bash setup.sh
 It does **not** overwrite an existing `.env`, and it backs up an existing
 database before importing a replacement.
 
+### cPanel Terminal shortcut
+
+If cPanel provides Terminal, the complete first run is:
+
+```bash
+cd ~/mikhmon
+bash setup.sh
+nano .env
+# set MIKHMON_PUBLIC_URL only if using webhooks
+php bin/mikhmon db:migrate --backup
+```
+
+Then set the subdomain document root to `~/mikhmon`, open the site, and verify
+`/data/mikhmon.db` returns 403/404.
+
 ## 3. Upload the code
 
 Pick one branch:
@@ -127,7 +142,16 @@ MIKHMON_TIMEZONE=Asia/Jakarta
 MIKHMON_SYNC_WORKER=cli
 MIKHMON_PHP_CLI=/usr/local/bin/php
 MIKHMON_LOG_LEVEL=info
+# Optional: public URL for RouterOS on-login webhooks.
+# Leave empty to keep webhook disabled; script fallback still records sales.
+MIKHMON_PUBLIC_URL=https://mikhmon.example.com
 ```
+
+If `MIKHMON_PUBLIC_URL` is filled, it must be reachable from RouterOS.
+Do not use `localhost` or a LAN-only address. If it is empty, no webhook is
+embedded in on-login; the `/system/script` fallback remains active.
+Save the hotspot profile after changing this value so the on-login snippet is
+regenerated.
 
 `data/mikhmon.db` is resolved relative to the project root, so it also works
 from cron or CLI.

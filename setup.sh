@@ -62,6 +62,9 @@ info "Checking required extensions..."
 "$PHP_BIN" -m | grep -qi 'pdo_sqlite' || fail "pdo_sqlite is not enabled. Enable it in cPanel → MultiPHP Manager → Extensions."
 "$PHP_BIN" -m | grep -qi 'json' || fail "json extension is not enabled."
 ok "pdo_sqlite and json are available"
+if ! "$PHP_BIN" -m | grep -qi 'mbstring'; then
+  warn "mbstring is not enabled; Mikhmon may fail on non-ASCII text."
+fi
 
 info "Creating runtime data directories..."
 mkdir -p data/backups data/cache data/locks data/logs
@@ -80,6 +83,10 @@ if [ ! -f .env ]; then
   fi
 else
   ok ".env already exists (not overwritten)"
+fi
+
+if grep -Eq '^MIKHMON_PUBLIC_URL=(https://mikhmon\.example\.com/?)?$' .env 2>/dev/null; then
+  warn "MIKHMON_PUBLIC_URL is empty or still the example; webhook will stay disabled until set."
 fi
 
 if [ "$SKIP_COMPOSER" -eq 0 ]; then
@@ -135,6 +142,7 @@ ok "Setup complete."
 echo "  URL        : https://your-domain/"
 echo "  Login      : mikhmon / 1234  (change it immediately)"
 echo "  Data       : $ROOT/data/mikhmon.db"
+echo "  Webhook    : set MIKHMON_PUBLIC_URL in .env, then save a hotspot profile once."
 echo "  Next       : set document root to $ROOT, enable HTTPS, add router, test Report/Users."
 echo "  Security   : verify /data/mikhmon.db returns 403/404."
 echo "  Docs       : docs/DEPLOYMENT.md"
