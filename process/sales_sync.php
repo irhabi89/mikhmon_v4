@@ -3,7 +3,7 @@
  * JSON endpoint for the sales sync UI.
  *
  * Actions: status, start, pause, cancel, scan_month, import_chunk, verify,
- *          probe, count_only, delete, prune_db.
+ *          probe, delete, prune_db.
  */
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -90,9 +90,6 @@ try {
             break;
         case 'probe':
             echo json_encode($service->probe($session), JSON_UNESCAPED_SLASHES);
-            break;
-        case 'count_only':
-            echo json_encode($service->countOnly($session), JSON_UNESCAPED_SLASHES);
             break;
         case 'delete':
             $deleteDb = isset($_POST['delete_db']) && $_POST['delete_db'] === '1';
