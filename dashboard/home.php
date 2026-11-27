@@ -21,6 +21,7 @@ error_reporting(0);
 if (!isset($_SESSION["mikhmon"])) {
   header("Location:../admin.php?id=login");
 } else {
+  $mmAutoReloadMs = isset($areload) && (int)$areload > 0 ? (int)$areload * 1000 : 10000;
 
 
 // get MikroTik system clock
@@ -319,7 +320,7 @@ if (!isset($_SESSION["mikhmon"])) {
                             load: function () {
                               setInterval(function () {
                                 requestDatta(sessiondata,interface);
-                              }, 8000);
+                              }, <?= (int)$mmAutoReloadMs; ?>);
                             }				
                           }
                         },

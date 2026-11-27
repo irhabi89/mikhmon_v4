@@ -51,6 +51,8 @@ $stats = $sales->stats($session, $serverFilter !== '' ? $serverFilter : null);
 $delta = $stats['month_sum'] - $stats['prev_sum'];
 $deltaPct = $stats['prev_sum'] > 0 ? ($delta / $stats['prev_sum'] * 100) : ($stats['month_sum'] > 0 ? 100 : 0);
 $status = $service->summary($session);
+$autoReloadSeconds = isset($areload) && (int)$areload > 0 ? (int)$areload : 10;
+$autoReloadMs = max(1000, $autoReloadSeconds * 1000);
 $serverNames = $sales->serverNames($session);
 $yearKeys = $sales->yearKeys($session);
 $monthOptions = \Mikhmon\Support\SalesFilter::months();
@@ -214,6 +216,10 @@ $actions = $syncButton
             <span id="mmLiveInfo" class="mm-muted">Menghubungi router...</span>
             <button type="button" class="btn bg-secondary" id="mmLiveStop" style="display:none;">Stop</button>
           </div>
+          <div id="mmLiveWarning" class="mm-alert mm-alert-warning" style="display:none;">
+            <span id="mmLiveWarningText"></span>
+            <a class="btn bg-primary" href="#mmSyncModal" id="mmLiveSyncCta" style="margin-left:8px;"><i class="fa fa-refresh"></i> Sinkronkan</a>
+          </div>
           <div class="mm-table-wrap" id="mmLiveWrap" style="display:none;">
             <table class="mm-table">
               <thead><tr><th>No</th><th>Tanggal</th><th>Jam</th><th>Server</th><th>Username</th><th>Profil</th><th>Komentar</th><th class="is-num">Harga</th></tr></thead>
@@ -234,11 +240,14 @@ $actions = $syncButton
           var empty = document.getElementById('mmLiveEmpty');
           var stop = document.getElementById('mmLiveStop');
           var pager = document.getElementById('mmLivePager');
-          var controller = new AbortController();
+          var controller = null;
+          var refreshTimer = 0;
+          var stopped = false;
           var allRows = [];
           var page = 1;
           var perPage = 50;
           var pendingRender = 0;
+          var autoReloadMs = <?= (int)$autoReloadMs; ?>;
           var serverToday = <?= json_encode(date('Y-m-d')); ?>;
           var serverMonth = <?= json_encode(date('Y-m')); ?>;
           var currency = <?= json_encode((string)$currency); ?>;
@@ -247,6 +256,20 @@ $actions = $syncButton
             return currency + ' ' + Number(value || 0).toLocaleString('id-ID', {maximumFractionDigits: decimals});
           }
           function setInfo(text) { if (info) { info.textContent = text; } }
+          function showCompare(c) {
+            window.MM_LIVE_COMPARE = c;
+            var warn = document.getElementById('mmLiveWarning');
+            var text = document.getElementById('mmLiveWarningText');
+            if (warn && text) {
+              if (c && c.complete && Number(c.missing || 0) > 0) {
+                text.innerHTML = '<b>' + Number(c.missing).toLocaleString('id-ID') + ' record live belum masuk database</b> (' + Number(c.unsynced_percent || 0).toLocaleString('id-ID', {maximumFractionDigits: 1}) + '%). Kemungkinan webhook gagal atau belum disinkronkan.';
+                warn.style.display = '';
+              } else {
+                warn.style.display = 'none';
+              }
+            }
+            document.dispatchEvent(new CustomEvent('mm-live-compare', {detail: c}));
+          }
           function renderPager() {
             if (!pager) { return; }
             if (!allRows.length) { pager.style.display = 'none'; pager.innerHTML = ''; return; }
@@ -296,42 +319,76 @@ $actions = $syncButton
             if (pendingRender) { return; }
             pendingRender = window.setTimeout(function () { pendingRender = 0; renderPage(); }, 120);
           }
-          if (stop) { stop.style.display = ''; stop.onclick = function () { controller.abort(); setInfo('Dihentikan. Data yang sudah tampil tetap ada.'); }; }
-          var url = './process/live_sales.php?' + location.search.replace(/^\?/, '');
-          fetch(url, {credentials: 'same-origin', signal: controller.signal, headers: {'Accept': 'application/x-ndjson'}})
-            .then(function (response) {
-              if (!response.ok || !response.body) { throw new Error('HTTP ' + response.status); }
-              var reader = response.body.getReader();
-              var decoder = new TextDecoder();
-              var buffer = '';
-              function pump() {
-                return reader.read().then(function (part) {
-                  if (part.done) { return; }
-                  buffer += decoder.decode(part.value, {stream: true});
-                  var lines = buffer.split('\n'); buffer = lines.pop();
-                  lines.forEach(function (line) {
-                    if (!line.trim()) { return; }
-                    var event; try { event = JSON.parse(line); } catch (e) { return; }
-                    if (event.type === 'row') { allRows.push(event.data); scheduleRender(); }
-                    if (event.type === 'progress') { setInfo('Membaca ' + Number(event.rows).toLocaleString('id-ID') + ' record...'); }
-                    if (event.type === 'done') {
-                      setInfo('Selesai: ' + Number(event.rows).toLocaleString('id-ID') + ' record dari MikroTik.');
-                      window.MM_LIVE_COUNT = Number(event.rows) || 0;
-                      document.dispatchEvent(new CustomEvent('mm-live-sales-loaded', {detail: {count: window.MM_LIVE_COUNT}}));
-                      renderPage();
-                      if (stop) { stop.style.display = 'none'; }
-                    }
-                    if (event.type === 'error') { setInfo('Gagal membaca MikroTik: ' + event.error); }
+          function scheduleRefresh() {
+            if (stopped) { return; }
+            if (refreshTimer) { clearTimeout(refreshTimer); }
+            refreshTimer = window.setTimeout(loadLive, autoReloadMs);
+          }
+          function loadLive() {
+            if (stopped) { return; }
+            if (controller) { try { controller.abort(); } catch (e) {} }
+            controller = new AbortController();
+            var nextRows = [];
+            var firstRow = true;
+            setInfo('Memperbarui data MikroTik...');
+            var search = location.search.replace(/^\?/, '');
+            var url = './process/live_sales.php?' + (search ? search + '&' : '') + 'compare=1';
+            fetch(url, {credentials: 'same-origin', signal: controller.signal, headers: {'Accept': 'application/x-ndjson'}})
+              .then(function (response) {
+                if (!response.ok || !response.body) { throw new Error('HTTP ' + response.status); }
+                var reader = response.body.getReader();
+                var decoder = new TextDecoder();
+                var buffer = '';
+                function pump() {
+                  return reader.read().then(function (part) {
+                    if (part.done) { return; }
+                    buffer += decoder.decode(part.value, {stream: true});
+                    var lines = buffer.split('\n'); buffer = lines.pop();
+                    lines.forEach(function (line) {
+                      if (!line.trim()) { return; }
+                      var event; try { event = JSON.parse(line); } catch (e) { return; }
+                      if (event.type === 'row') {
+                        if (firstRow) { allRows = []; page = 1; firstRow = false; }
+                        nextRows.push(event.data); allRows.push(event.data); scheduleRender();
+                      }
+                      if (event.type === 'compare') { showCompare(event); }
+                      if (event.type === 'progress') { setInfo('Membaca ' + Number(event.rows).toLocaleString('id-ID') + ' record...'); }
+                      if (event.type === 'done') {
+                        if (!nextRows.length) { allRows = []; page = 1; renderPage(); }
+                        setInfo('Selesai: ' + Number(event.rows).toLocaleString('id-ID') + ' record dari MikroTik.');
+                        window.MM_LIVE_COUNT = Number(event.rows) || 0;
+                        document.dispatchEvent(new CustomEvent('mm-live-sales-loaded', {detail: {count: window.MM_LIVE_COUNT}}));
+                        if (stop) { stop.style.display = 'none'; }
+                        scheduleRefresh();
+                      }
+                      if (event.type === 'error') {
+                        setInfo('Gagal membaca MikroTik: ' + event.error);
+                        scheduleRefresh();
+                      }
+                    });
+                    return pump();
                   });
-                  return pump();
-                });
-              }
-              return pump();
-            })
-            .catch(function (err) {
-              if (err && err.name === 'AbortError') { return; }
-              setInfo('Gagal membaca MikroTik: ' + err.message + '. Gunakan Sinkronisasi manual jika perlu.');
-            });
+                }
+                return pump();
+              })
+              .catch(function (err) {
+                if (err && err.name === 'AbortError') { return; }
+                setInfo('Gagal membaca MikroTik: ' + err.message + '. Data terakhir dipertahankan.');
+                scheduleRefresh();
+              });
+          }
+          if (stop) {
+            stop.style.display = '';
+            stop.onclick = function () {
+              stopped = true;
+              if (refreshTimer) { clearTimeout(refreshTimer); }
+              if (controller) { controller.abort(); }
+              setInfo('Dihentikan. Data yang sudah tampil tetap ada.');
+            };
+          }
+          var cta = document.getElementById('mmLiveSyncCta');
+          if (cta) { cta.addEventListener('click', function () { document.dispatchEvent(new CustomEvent('mm-open-sync-modal')); }); }
+          loadLive();
         })();
         </script>
       <?php else: ?>

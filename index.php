@@ -236,7 +236,7 @@ if ($livereport == "enable" || $livereport == "") {
       echo 'mmRefreshIncome();';
     }
   echo  '
-    var interval2 = "65432";
+    var interval2 = "' . $reload_interval . '";
     var livereport = setInterval(function() {
       mmRefreshIncome();
   }, interval2);

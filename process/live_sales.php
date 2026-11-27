@@ -30,6 +30,7 @@ if ($session === '') {
 }
 $summaryMode = isset($_GET['summary']) && (string)$_GET['summary'] === '1';
 $streamSummary = $summaryMode && isset($_GET['stream']) && (string)$_GET['stream'] === '1';
+$compareMode = isset($_GET['compare']) && (string)$_GET['compare'] === '1';
 $meta = \Mikhmon\Support\SalesFilter::fromQuery($_GET);
 $filter = $meta['filter'];
 
@@ -60,6 +61,16 @@ $month = date('Y-m');
 $summary = array('today_count' => 0, 'today_sum' => 0.0, 'month_count' => 0, 'month_sum' => 0.0, 'total_count' => 0, 'total_sum' => 0.0);
 $count = 0;
 $started = microtime(true);
+$compareTotal = 0;
+$compareMatched = 0;
+$compareSeen = array();
+$dbTotal = 0;
+$dbCheck = null;
+if ($compareMode) {
+    $db = mikhmon_database();
+    $dbTotal = (int)$db->value('SELECT COUNT(*) FROM sales_records WHERE session = ?', array($session));
+    $dbCheck = $db->pdo()->prepare('SELECT 1 FROM sales_records WHERE session = ? AND name = ? LIMIT 1');
+}
 
 try {
     $client = (new \Mikhmon\Router\RouterClientFactory(mikhmon_database()))->forSession($session);
@@ -68,10 +79,20 @@ try {
         echo json_encode(array('type' => 'meta', 'source' => 'router', 'session' => $session)) . "\n";
         flush();
     }
-    $result = $client->stream('/system/script/print', array('.proplist' => '.id,name,comment'), function (array $row) use ($filter, $summaryMode, &$count, $today, $month, &$summary) {
+    $result = $client->stream('/system/script/print', array('.proplist' => '.id,name,comment'), function (array $row) use ($filter, $summaryMode, $compareMode, &$count, $today, $month, &$summary, &$compareTotal, &$compareMatched, &$compareSeen, $dbCheck, $session) {
         $name = isset($row['name']) ? (string)$row['name'] : '';
         $comment = isset($row['comment']) ? (string)$row['comment'] : '';
         if ($name === '' || !\Mikhmon\Support\RecordParser::isSalesRecord($name, $comment)) { return true; }
+        if ($compareMode && !isset($compareSeen[$name])) {
+            $compareSeen[$name] = true;
+            $compareTotal++;
+            if ($dbCheck !== null) {
+                $dbCheck->execute(array($session, $name));
+                if ($dbCheck->fetchColumn() !== false) {
+                    $compareMatched++;
+                }
+            }
+        }
         $parsed = \Mikhmon\Support\RecordParser::parse($name);
         if ($parsed === null || !mm_live_match($parsed, $filter)) { return true; }
         $count++;
@@ -109,6 +130,29 @@ try {
             echo json_encode(array('ok' => true, 'source' => 'router', 'count' => $count, 'summary' => $summary)) . "\n";
         }
     } else {
+        if ($compareMode) {
+            $compareMissing = max(0, $compareTotal - $compareMatched);
+            $compare = array(
+                'type' => 'compare',
+                'source' => 'live',
+                'router_total' => $compareTotal,
+                'db_total' => $dbTotal,
+                'matched' => $compareMatched,
+                'missing' => $compareMissing,
+                'archive_extra' => max(0, $dbTotal - $compareMatched),
+                'synced_percent' => $compareTotal > 0 ? round($compareMatched / $compareTotal * 100, 1) : null,
+                'unsynced_percent' => $compareTotal > 0 ? round($compareMissing / $compareTotal * 100, 1) : null,
+                'verified' => false,
+                'complete' => (bool)$result->ok,
+                'checked_at' => date('Y-m-d H:i:s'),
+            );
+            echo json_encode($compare, JSON_UNESCAPED_SLASHES) . "\n";
+            if ($result->ok) {
+                $cacheDir = dirname(__DIR__) . '/data/cache';
+                if (!is_dir($cacheDir)) { @mkdir($cacheDir, 0775, true); }
+                @file_put_contents($cacheDir . '/live-compare-' . hash('sha256', $session) . '.json', json_encode($compare, JSON_UNESCAPED_SLASHES));
+            }
+        }
         echo json_encode(array('type' => 'done', 'rows' => $count, 'complete' => $result->ok, 'error' => $result->error)) . "\n";
     }
 } catch (Throwable $e) {

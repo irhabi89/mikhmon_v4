@@ -11,6 +11,7 @@
   var csrf = cfg.csrf || "";
   var polling = false;
   var running = false;
+  var liveCompare = null;
 
   function $(id) { return document.getElementById(id); }
   function esc(value) {
@@ -67,6 +68,26 @@
     bar.style.width = Math.max(0, Math.min(100, percent || 0)) + "%";
   }
 
+  function renderLiveCompare(c) {
+    if (!c || running || polling) { return; }
+    var info = $("mmSyncInfo");
+    var badge = $("mmSyncBadge");
+    if (info) {
+      info.innerHTML = "MikroTik live: <b>" + fmt(c.router_total) + "</b> record &nbsp;|&nbsp; "
+        + "Database: <b>" + fmt(c.db_total) + "</b> &nbsp;|&nbsp; "
+        + "Cocok: <b>" + fmt(c.matched) + "</b> &nbsp;|&nbsp; "
+        + "Belum: <b class='" + (Number(c.missing || 0) > 0 ? "text-orange" : "text-green") + "'>" + fmt(c.missing) + "</b>"
+        + (c.unsynced_percent !== null && typeof c.unsynced_percent !== "undefined" ? " (" + pct(c.unsynced_percent) + ")" : "")
+        + (c.archive_extra ? "<br><span class='mm-muted'>Arsip DB: " + fmt(c.archive_extra) + " · bukan kegagalan sync</span>" : "");
+      if (c.checked_at) { info.innerHTML += "<br><span class='mm-muted'>Perbandingan live: " + esc(c.checked_at) + "</span>"; }
+    }
+    if (badge && !running) {
+      var missing = Number(c.missing || 0);
+      badge.className = "mm-badge " + (missing === 0 ? "bg-green text-white" : "bg-orange text-white");
+      badge.innerHTML = '<i class="fa fa-refresh"></i> ' + (missing === 0 ? "Data live sudah cocok" : "Belum tersinkron " + (c.unsynced_percent !== null ? pct(c.unsynced_percent) : "") + " (" + fmt(missing) + ")");
+    }
+  }
+
   function render(data) {
     if (!data) { return; }
     var info = $("mmSyncInfo");
@@ -78,6 +99,10 @@
     var liveCount = Number(window.MM_LIVE_COUNT || 0);
     if (info) {
       var parts = [];
+      if (!run && liveCompare) {
+        renderLiveCompare(liveCompare);
+        return;
+      }
       if (liveCount > 0 && !Number(db.total || 0) && !run) {
         info.innerHTML = "MikroTik live: <b>" + fmt(liveCount) + "</b> record &nbsp;|&nbsp; Database: <b>0</b> &nbsp;|&nbsp; <b class='text-orange'>Belum diimpor</b>";
         return;
@@ -278,13 +303,32 @@
 
   document.addEventListener("mm-live-sales-loaded", function (event) {
     if (running || polling) { return; }
-    var info = $("mmSyncInfo");
-    if (!info) { return; }
-    var count = Number(event.detail && event.detail.count ? event.detail.count : 0);
-    if (count > 0) {
-      info.innerHTML = "MikroTik live: <b>" + fmt(count) + "</b> record &nbsp;|&nbsp; Database: <b>0</b> &nbsp;|&nbsp; <b class='text-orange'>Belum diimpor</b>";
-    }
+    window.MM_LIVE_COUNT = Number(event.detail && event.detail.count ? event.detail.count : window.MM_LIVE_COUNT || 0);
+    if (!liveCompare) { loadCachedLiveCompare(); }
   });
+
+  document.addEventListener("mm-live-compare", function (event) {
+    if (running || polling) { return; }
+    liveCompare = event.detail || null;
+    if (liveCompare) { renderLiveCompare(liveCompare); }
+  });
+
+  document.addEventListener("mm-open-sync-modal", function () {
+    window.location.hash = "#mmSyncModal";
+  });
+
+  function loadCachedLiveCompare() {
+    if (!session) { return; }
+    fetch("./process/live_compare.php?session=" + encodeURIComponent(session), {credentials: "same-origin"})
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data && data.ok && data.router_total >= 0) {
+          liveCompare = data;
+          renderLiveCompare(liveCompare);
+        }
+      })
+      .catch(function () { /* live comparison is optional */ });
+  }
 
   document.addEventListener("DOMContentLoaded", function () {
     var startBtn = $("mmSyncStart");
@@ -295,6 +339,7 @@
     if (probeBtn) { probeBtn.addEventListener("click", probe); }
     if (session) {
       loadStatus().catch(function () { /* ignore initial failure */ });
+      loadCachedLiveCompare();
     }
   });
 })();
