@@ -139,3 +139,36 @@ ROS;
 
     return $bg;
 }
+
+if (!function_exists('mikhmon_is_ros6')) {
+    function mikhmon_is_ros6($api): bool
+    {
+        try {
+            $res = $api->comm('/system/resource/print');
+            $version = isset($res[0]['version']) ? (string)$res[0]['version'] : '';
+            if (preg_match('/^(\d+)\.(\d+)/', $version, $m) !== 1) {
+                return false;
+            }
+            return (int)$m[1] < 7;
+        } catch (Throwable $e) {
+            return false;
+        }
+    }
+}
+
+if (!function_exists('mikhmon_v3_compact_onlogin')) {
+    /**
+     * Compact on-login for legacy RouterOS 6, whose profile on-login field
+     * rejects the full expiry logic once a webhook is added.
+     * Expiry is handled by the existing Mikhmon expire monitor.
+     */
+    function mikhmon_v3_compact_onlogin($price, $validity, $profile, string $webhookPart, string $lock = ''): string
+    {
+        $record = '; :local sv "$server"; :if ([:len $sv] = 0) do={:local h [/ip hotspot find where interface=$interface]; :if ([:len $h] > 0) do={:set sv [/ip hotspot get $h name]}}; '
+            . ':local dt [/system clock get date]; :local tm [/system clock get time]; '
+            . ':local sname "$dt-|-$tm-|-$user-|-' . $price . '-|-$address-|-$mac-|-' . $validity . '-|-' . $profile . '-|-$comment|#MMSRV1#|$sv"; '
+            . '/system script add name=$sname source="compact" comment=mikhmon; '
+            . $webhookPart . $lock;
+        return $record;
+    }
+}
