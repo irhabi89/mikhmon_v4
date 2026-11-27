@@ -37,7 +37,7 @@ function mikhmon_v3_onlogin_script($expmode, $price, $validity, $sprice, $getloc
 :local comment [ /ip hotspot user get [ /ip hotspot user find where name="$user" ] comment ];
 :local ucode [:pick $comment 0 2];
 :if ($ucode = "vc" or $ucode = "up" or $comment = "") do={
-  /sys sch add name="$user" disable=no start-date=$date interval="{{validity}}";
+  /sys sch add name="$user" disable=no start-date=$dt interval="{{validity}}";
   :delay 2s;
   :local exp [ /sys sch get [ /sys sch find where name="$user" ] next-run ];
   :local expLegacy;
@@ -160,15 +160,26 @@ if (!function_exists('mikhmon_v3_compact_onlogin')) {
     /**
      * Compact on-login for legacy RouterOS 6, whose profile on-login field
      * rejects the full expiry logic once a webhook is added.
-     * Expiry is handled by the existing Mikhmon expire monitor.
+     *
+     * Expiry is installed as a per-user RouterOS scheduler instead of the
+     * long inline next-run/comment logic used by the ROS7 profile script.
      */
-    function mikhmon_v3_compact_onlogin($price, $validity, $profile, string $webhookPart, string $lock = ''): string
+    function mikhmon_v3_compact_onlogin($price, $validity, $profile, string $webhookPart, string $lock = '', string $mode = ''): string
     {
-        $record = '; :local sv "$server"; :if ([:len $sv] = 0) do={:local h [/ip hotspot find where interface=$interface]; :if ([:len $h] > 0) do={:set sv [/ip hotspot get $h name]}}; '
+        $expiry = '';
+        if ($mode !== '') {
+            $action = $mode === 'remove'
+                ? '("/ip hotspot user remove [find name=" . $user . "]; /ip hotspot active remove [find user=" . $user . "]")'
+                : '("/ip hotspot user set [find name=" . $user . "] limit-uptime=1s")';
+            $expiry = ' :if ([:len [/system scheduler find where name=$user]] > 0) do={/system scheduler remove [find where name=$user]}; '
+                . ':local ev ' . $action . '; '
+                . '/system scheduler add name=$user start-date=$dt interval="' . $validity . '" on-event=$ev comment="Mikhmon expiry"; ';
+        }
+        return '; :local sv "$server"; '
+            . ':if ([:len $sv] = 0) do={:local h [/ip hotspot find where interface=$interface]; :if ([:len $h] > 0) do={:set sv [/ip hotspot get $h name]}}; '
             . ':local dt [/system clock get date]; :local tm [/system clock get time]; '
             . ':local sname "$dt-|-$tm-|-$user-|-' . $price . '-|-$address-|-$mac-|-' . $validity . '-|-' . $profile . '-|-$comment|#MMSRV1#|$sv"; '
             . '/system script add name=$sname source="compact" comment=mikhmon; '
-            . $webhookPart . $lock;
-        return $record;
+            . $expiry . $webhookPart . $lock;
     }
 }
