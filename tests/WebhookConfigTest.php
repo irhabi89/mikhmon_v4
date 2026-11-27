@@ -24,6 +24,18 @@ final class WebhookConfigTest extends TestCase
         );
     }
 
+    public function testDotenvStyleEnvFallbackIsRead(): void
+    {
+        putenv('MIKHMON_PUBLIC_URL');
+        $_ENV['MIKHMON_PUBLIC_URL'] = 'https://mikhmon.ghaib.net';
+        $_SERVER['MIKHMON_PUBLIC_URL'] = 'https://mikhmon.ghaib.net';
+        try {
+            $this->assertSame('https://mikhmon.ghaib.net', \mikhmon_webhook_public_url());
+        } finally {
+            unset($_ENV['MIKHMON_PUBLIC_URL'], $_SERVER['MIKHMON_PUBLIC_URL']);
+        }
+    }
+
     public function testInvalidOrMissingPublicUrlProducesNoWebhookUrl(): void
     {
         putenv('MIKHMON_PUBLIC_URL=not-a-url');

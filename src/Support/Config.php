@@ -65,6 +65,18 @@ final class Config
     {
         $value = getenv($key);
         if ($value === false || $value === '') {
+            // vlucas/phpdotenv's immutable repository writes to $_ENV and
+            // $_SERVER, not necessarily to the process environment. Read both
+            // so values in .env (for example MIKHMON_PUBLIC_URL) behave the
+            // same under PHP-FPM, CLI and cron.
+            foreach (array($_ENV, $_SERVER) as $source) {
+                if (is_array($source) && array_key_exists($key, $source)) {
+                    $value = $source[$key];
+                    break;
+                }
+            }
+        }
+        if ($value === false || $value === null || $value === '') {
             if (array_key_exists($key, self::$defaults)) {
                 return self::$defaults[$key];
             }
