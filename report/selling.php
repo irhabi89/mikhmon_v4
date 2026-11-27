@@ -329,7 +329,7 @@ $actions = $syncButton
             if (controller) { try { controller.abort(); } catch (e) {} }
             controller = new AbortController();
             var nextRows = [];
-            var firstRow = true;
+            var hadRows = allRows.length > 0;
             setInfo('Memperbarui data MikroTik...');
             var search = location.search.replace(/^\?/, '');
             var url = './process/live_sales.php?' + (search ? search + '&' : '') + 'compare=1';
@@ -348,13 +348,17 @@ $actions = $syncButton
                       if (!line.trim()) { return; }
                       var event; try { event = JSON.parse(line); } catch (e) { return; }
                       if (event.type === 'row') {
-                        if (firstRow) { allRows = []; page = 1; firstRow = false; }
-                        nextRows.push(event.data); allRows.push(event.data); scheduleRender();
+                        nextRows.push(event.data);
+                        // Initial load: show rows progressively. Refresh: keep the
+                        // previous complete table/KPI until the new scan finishes.
+                        if (!hadRows) { allRows.push(event.data); scheduleRender(); }
                       }
                       if (event.type === 'compare') { showCompare(event); }
                       if (event.type === 'progress') { setInfo('Membaca ' + Number(event.rows).toLocaleString('id-ID') + ' record...'); }
                       if (event.type === 'done') {
-                        if (!nextRows.length) { allRows = []; page = 1; renderPage(); }
+                        allRows = nextRows;
+                        page = 1;
+                        renderPage();
                         setInfo('Selesai: ' + Number(event.rows).toLocaleString('id-ID') + ' record dari MikroTik.');
                         window.MM_LIVE_COUNT = Number(event.rows) || 0;
                         document.dispatchEvent(new CustomEvent('mm-live-sales-loaded', {detail: {count: window.MM_LIVE_COUNT}}));

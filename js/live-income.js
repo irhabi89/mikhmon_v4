@@ -7,6 +7,8 @@
   if (window.MMLiveIncome) { return; }
   var active = null;
   var lastOpts = null;
+  var hasRendered = false;
+  var inFlight = false;
 
   function money(currency, decimals, value) {
     return currency + ' ' + Number(value || 0).toLocaleString('id-ID', {maximumFractionDigits: decimals});
@@ -19,8 +21,10 @@
 
   function start(opts) {
     lastOpts = opts;
+    if (inFlight) { return; }
     if (active) { try { active.abort(); } catch (e) {} }
     active = new AbortController();
+    inFlight = true;
     var currency = opts.currency || 'Rp';
     var decimals = Number(opts.decimals || 0);
     var today = opts.today || new Date().toISOString().slice(0, 10);
@@ -44,6 +48,7 @@
       set('mmDashMonthCount', monthCount.toLocaleString('id-ID'));
       var vals = document.getElementById('mmDashLiveValues');
       if (vals) { vals.style.display = ''; }
+      hasRendered = true;
       clearError();
     }
     function schedule() {
@@ -72,10 +77,10 @@
                 totalCount++; totalSum += price;
                 if (event.data.date_key === today) { todayCount++; todaySum += price; }
                 if (String(event.data.date_key || '').slice(0, 7) === month) { monthCount++; monthSum += price; }
-                schedule();
+                if (!hasRendered) { schedule(); }
               }
-              if (event.type === 'done') { render(); }
-              if (event.type === 'error') { showError('Data live gagal dimuat: ' + String(event.error || '')); }
+              if (event.type === 'done') { inFlight = false; render(); }
+              if (event.type === 'error') { inFlight = false; showError('Data live gagal dimuat: ' + String(event.error || '')); }
             });
             return pump();
           });
@@ -83,7 +88,8 @@
         return pump();
       })
       .catch(function (err) {
-        if (err && err.name === 'AbortError') { return; }
+        if (err && err.name === 'AbortError') { inFlight = false; return; }
+        inFlight = false;
         showError('Data live gagal dimuat: ' + String(err.message));
       });
   }
@@ -91,7 +97,7 @@
   window.MMLiveIncome = {
     start: start,
     refresh: function () {
-      if (lastOpts) { start(lastOpts); }
+      if (!inFlight && lastOpts) { start(lastOpts); }
     }
   };
 })();
