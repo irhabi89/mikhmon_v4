@@ -406,6 +406,7 @@ if (!isset($_SESSION["mikhmon"])) {
                         (function () {
                           var box = document.getElementById('reloadLreport');
                           if (!box || !window.MMLiveIncome) { return; }
+                          box.setAttribute('data-live-income', '1');
                           box.innerHTML = '<div id="mmDashLiveValues">' +
                             <?= json_encode((string)$_today); ?> + ' : <b id="mmDashTodayValue">-</b> <small class="mm-muted">(<span id="mmDashTodayCount">-</span> voucher)</small><br>' +
                             <?= json_encode((string)$_this_month); ?> + ' : <b id="mmDashMonthValue">-</b> <small class="mm-muted">(<span id="mmDashMonthCount">-</span> voucher)</small></div>' +

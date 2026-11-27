@@ -216,17 +216,29 @@ if ($hotspot == "dashboard" || substr($last_url_part, 0, 8) == "?session") {
 
 ';
 if ($livereport == "enable" || $livereport == "") {
+  echo '
+    function mmIncomeIsLive() {
+      return !!document.querySelector("#r_4 [data-live-income=\"1\"]");
+    }
+    function mmRefreshIncome() {
+      if (mmIncomeIsLive()) {
+        if (window.MMLiveIncome) { window.MMLiveIncome.refresh(); }
+        return;
+      }
+      $("#r_4").load("./report/livereport.php?session=' . $session . ' #r_4");
+    }
+  ';
   if($_SESSION[$session.'sdate'] != $_SESSION[$session.'idhr']){
     $_SESSION[$session.'totalHr'] = "0";
-    echo '$("#r_4").load("./report/livereport.php?session=' . $session . ' #r_4");';
+    echo 'mmRefreshIncome();';
     }else if ($_SESSION[$session.'sdate'] == $_SESSION[$session.'idhr']){  
     }else{
-      echo '$("#r_4").load("./report/livereport.php?session=' . $session . ' #r_4");';
+      echo 'mmRefreshIncome();';
     }
   echo  '
     var interval2 = "65432";
     var livereport = setInterval(function() {
-    $("#r_4").load("./report/livereport.php?session=' . $session . ' #r_4"); 
+      mmRefreshIncome();
   }, interval2);
  ';}
   echo ' 

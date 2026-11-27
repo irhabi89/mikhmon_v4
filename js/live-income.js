@@ -6,6 +6,7 @@
   "use strict";
   if (window.MMLiveIncome) { return; }
   var active = null;
+  var lastOpts = null;
 
   function money(currency, decimals, value) {
     return currency + ' ' + Number(value || 0).toLocaleString('id-ID', {maximumFractionDigits: decimals});
@@ -17,6 +18,7 @@
   }
 
   function start(opts) {
+    lastOpts = opts;
     if (active) { try { active.abort(); } catch (e) {} }
     active = new AbortController();
     var currency = opts.currency || 'Rp';
@@ -86,5 +88,10 @@
       });
   }
 
-  window.MMLiveIncome = {start: start};
+  window.MMLiveIncome = {
+    start: start,
+    refresh: function () {
+      if (lastOpts) { start(lastOpts); }
+    }
+  };
 })();
