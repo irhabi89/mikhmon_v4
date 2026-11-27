@@ -259,6 +259,21 @@
     });
   }
 
+  function countOnly() {
+    var info = $("mmCountOnlyInfo");
+    if (info) { info.textContent = "Menghitung count-only..."; }
+    post("count_only", {}).then(function (data) {
+      if (!info) { return; }
+      var pctText = data.estimated_percent === null ? "-" : pct(data.estimated_percent);
+      info.innerHTML = "Perkiraan count-only: <b>" + pctText + "</b> · DB " + fmt(data.db_count)
+        + " / Router " + fmt(data.router_count) + " script"
+        + (data.archive_extra ? " · " + fmt(data.archive_extra) + " arsip" : "")
+        + "<br><span class='text-orange'>Bukan verifikasi penuh; gunakan scan untuk angka pasti.</span>";
+    }).catch(function (err) {
+      if (info) { info.innerHTML = "<span class='text-red'>" + esc(err.message) + "</span>"; }
+    });
+  }
+
   function probe() {
     showError("");
     post("probe", {}).then(function (data) {
@@ -275,9 +290,11 @@
     var startBtn = $("mmSyncStart");
     var cancelBtn = $("mmSyncCancel");
     var probeBtn = $("mmSyncProbe");
+    var countOnlyBtn = $("mmSyncCountOnly");
     if (startBtn) { startBtn.addEventListener("click", start); }
     if (cancelBtn) { cancelBtn.addEventListener("click", cancel); }
     if (probeBtn) { probeBtn.addEventListener("click", probe); }
+    if (countOnlyBtn) { countOnlyBtn.addEventListener("click", countOnly); }
     if (session) {
       loadStatus().catch(function () { /* ignore initial failure */ });
     }

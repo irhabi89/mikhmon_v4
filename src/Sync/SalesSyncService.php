@@ -452,6 +452,44 @@ final class SalesSyncService
         return (int)$cleanup['deleted'];
     }
 
+    /**
+     * Experimental count-only estimate. It never writes to SQLite and is not
+     * a replacement for the exact set reconciliation.
+     *
+     * RouterOS counts scripts whose comment is exactly "mikhmon"; this is the
+     * marker written by on-login/profile scripts. The estimate is useful only
+     * as a quick sanity check and must be labelled as such in the UI.
+     *
+     * @return array<string,mixed>
+     */
+    public function countOnly(string $session): array
+    {
+        $this->assertSession($session);
+        $client = $this->factory->forSession($session);
+        $client->connect();
+        try {
+            $routerCount = $client->count('/system/script/print', array('?comment' => 'mikhmon'));
+        } finally {
+            $client->close();
+        }
+        $dbCount = $this->sales->count($session);
+        $usable = min($dbCount, $routerCount);
+        $percent = $routerCount > 0 ? round($usable / $routerCount * 100, 1) : null;
+        return array(
+            'ok' => true,
+            'method' => 'count-only',
+            'filter' => 'comment=mikhmon',
+            'router_count' => $routerCount,
+            'db_count' => $dbCount,
+            'estimated_matched' => $usable,
+            'estimated_missing' => max(0, $routerCount - $dbCount),
+            'estimated_percent' => $percent,
+            'archive_extra' => max(0, $dbCount - $routerCount),
+            'verified' => false,
+            'checked_at' => date('Y-m-d H:i:s'),
+        );
+    }
+
     public function deleteData(string $session, array $filter, bool $deleteDb, bool $deleteRouter): array
     {
         $this->assertSession($session);

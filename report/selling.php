@@ -394,10 +394,12 @@ $actions = $syncButton
     <div class="mm-page-actions">
       <button type="button" class="btn bg-primary" id="mmSyncStart"><i class="fa fa-play"></i> Mulai Sinkronisasi</button>
       <button type="button" class="btn bg-warning" id="mmSyncCancel" style="display:none;"><i class="fa fa-stop"></i> Batalkan</button>
+      <button type="button" class="btn bg-secondary" id="mmSyncCountOnly"><i class="fa fa-calculator"></i> Hitung Cepat</button>
       <button type="button" class="btn bg-secondary" id="mmSyncProbe"><i class="fa fa-plug"></i> Tes Koneksi</button>
       <a class="btn bg-secondary" href="#" title="Close">Tutup</a>
     </div>
     <p style="margin-top:10px;"><span id="mmSyncBadge"><?= mikhmon_source_badge($status); ?></span></p>
+    <p id="mmCountOnlyInfo" class="mm-muted" style="font-size:12px;"></p>
   </div>
 </div>
 
