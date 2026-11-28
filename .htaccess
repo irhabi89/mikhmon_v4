@@ -1,4 +1,4 @@
-# MIKHMON v4 — GHAIB-NETWORK Edition
+# MIKHMON v4 — GHAIB.NET Edition
 # Apache/LiteSpeed deployment guard. Nginx users must mirror these denies in
 # the server block (see docs/DEPLOYMENT.md).
 Options -Indexes

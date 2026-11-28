@@ -1,7 +1,7 @@
 <?php
 /*
  *  Original Mikhmon: Copyright (C) 2018 Laksamadi Guko.
- *  GHAIB-NETWORK Edition modifications: Copyright (C) 2026 PT GHAIB-NETWORK.
+ *  GHAIB.NET Edition modifications: Copyright (C) 2026 GHAIB.NET.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -22,7 +22,7 @@ $version = htmlspecialchars((string)($versionData['version'] ?? ($_SESSION['v'] 
 $branch = htmlspecialchars((string)($versionData['branch'] ?? ($_SESSION['vbranch'] ?? '')), ENT_QUOTES, 'UTF-8');
 $updated = htmlspecialchars((string)($versionData['updated'] ?? '2026-11-26'), ENT_QUOTES, 'UTF-8');
 $developer = htmlspecialchars((string)($versionData['developer'] ?? 'quiqxiq'), ENT_QUOTES, 'UTF-8');
-$edition = htmlspecialchars((string)($versionData['edition'] ?? 'GHAIB-NETWORK'), ENT_QUOTES, 'UTF-8');
+$edition = htmlspecialchars((string)($versionData['edition'] ?? 'GHAIB.NET'), ENT_QUOTES, 'UTF-8');
 ?>
 <div class="row">
   <div class="col-12">
@@ -34,27 +34,27 @@ $edition = htmlspecialchars((string)($versionData['edition'] ?? 'GHAIB-NETWORK')
         <h3>MIKHMON <?= $version; ?> — <?= $edition; ?> Edition</h3>
         <p>
           Aplikasi manajemen hotspot MikroTik untuk pengusaha hotspot.
-          Edisi ini dikembangkan dan dipelihara oleh <b>PT GHAIB-NETWORK</b>.
+          Edisi ini dikembangkan dan dipelihara oleh <b>GHAIB.NET</b>.
         </p>
         <ul>
-          <li><b>Modified and maintained by:</b> PT GHAIB-NETWORK</li>
+          <li><b>Modified and maintained by:</b> GHAIB.NET</li>
           <li><b>Developer:</b> <?= $developer; ?></li>
           <li><b>Branch:</b> <?= $branch !== '' ? $branch : 'feat/report-sqlite-ui'; ?></li>
           <li><b>Version:</b> <?= $version; ?> (<?= $updated; ?>)</li>
           <li><b>Original author:</b> Laksamadi Guko</li>
           <li><b>License:</b> <a href="https://github.com/laksa19/mikhmonv3/blob/master/LICENSE" target="_blank" rel="noopener">GPLv2</a></li>
-          <li><b>GHAIB-NETWORK:</b> <a href="https://www.ghaib.net/" target="_blank" rel="noopener">www.ghaib.net</a></li>
+          <li><b>GHAIB.NET:</b> <a href="https://www.ghaib.net/" target="_blank" rel="noopener">www.ghaib.net</a></li>
         </ul>
         <p>
-          <b>Tentang GHAIB-NETWORK</b><br>
-          GHAIB-NETWORK adalah perusahaan teknologi (PT) yang menyediakan solusi
+          <b>Tentang GHAIB.NET</b><br>
+          GHAIB.NET menyediakan solusi
           IT, administrasi jaringan, konfigurasi MikroTik, pemasangan internet
           dan CCTV, penarikan kabel fiber optik, serta pengembangan web.
           Berdiri sejak 2018 dan berbasis di Karduluk, Pragaan, Sumenep,
           Jawa Timur.
         </p>
         <p>
-          <i>Copyright &copy; 2018 Laksamadi Guko. Modifikasi &copy; 2026 PT GHAIB-NETWORK. Developer: <?= $developer; ?>.</i>
+          <i>Copyright &copy; 2018 Laksamadi Guko. Modifikasi &copy; 2026 GHAIB.NET. Developer: <?= $developer; ?>.</i>
         </p>
       </div>
     </div>

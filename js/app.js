@@ -12,8 +12,14 @@
   });
 
   function closeModalByHash() {
+    var sx = window.scrollX;
+    var sy = window.scrollY;
     if (window.location.hash) {
-      history.replaceState(null, document.title, window.location.pathname + window.location.search);
+      window.location.hash = "_";
+      if (window.history && window.history.replaceState) {
+        window.history.replaceState(null, document.title, window.location.pathname + window.location.search);
+      }
+      window.scrollTo(sx, sy);
     }
   }
 
@@ -27,8 +33,9 @@
   document.addEventListener("click", function (event) {
     var target = event.target;
     if (!(target instanceof Element)) { return; }
-    if (target.matches(".modal-window") || target.matches(".modal-window .modal-close")) {
-      if (target.matches(".modal-close")) { event.preventDefault(); }
+    var closeTrigger = target.closest('.modal-window .modal-close, .modal-window [data-modal-close], .modal-window a[href="#"]');
+    if (closeTrigger || target.matches(".modal-window")) {
+      if (closeTrigger) { event.preventDefault(); }
       closeModalByHash();
     }
   });

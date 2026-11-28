@@ -1,7 +1,7 @@
 # Deployment — cPanel / Shared Hosting
 
-**MIKHMON v4 — GHAIB-NETWORK Edition**  
-Maintained by PT GHAIB-NETWORK · Developer: quiqxiq.
+**MIKHMON v4 — GHAIB.NET Edition**  
+Maintained by GHAIB.NET · Developer: quiqxiq.
 
 This guide deploys the application with its runtime data **inside the project
 directory** (`data/mikhmon.db`), which is the default configuration. An
@@ -251,7 +251,7 @@ falls back to a web worker; cron is still more reliable for large archives.
 2. Login with `mikhmon` / `1234`.
 3. Change the admin password in **Pengaturan**.
 4. Add the router session and test Dashboard, Report, Users, and About.
-5. Confirm About shows `MIKHMON v4.0.0 — GHAIB-NETWORK Edition`.
+5. Confirm About shows `MIKHMON v4.0.0 — GHAIB.NET Edition`.
 6. Enable HTTPS.
 
 ## 12. Update procedure

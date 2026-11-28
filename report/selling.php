@@ -613,53 +613,61 @@ $actions = $syncButton
 
 <!-- Sync modal -->
 <div class="modal-window" id="mmSyncModal" aria-hidden="true">
-  <div>
-    <header><h1><i class="fa fa-refresh"></i> Sinkronisasi Penjualan</h1></header>
-    <a class="modal-close" href="#" title="Close" aria-label="Close">X</a>
-    <div id="mmSyncInfo" class="mm-muted" style="line-height:1.5;">Memuat status...</div>
-    <div style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px;margin-top:8px;">
+  <div class="mm-modal-card">
+    <header>
+      <h1><i class="fa fa-refresh"></i> Sinkronisasi Penjualan</h1>
+      <a class="modal-close" href="#" title="Tutup" aria-label="Tutup"><i class="fa fa-times"></i></a>
+    </header>
+    <div id="mmSyncInfo" class="mm-sync-summary">Memuat status...</div>
+    <div class="mm-sync-meta">
       <span id="mmSyncPhase" class="mm-muted">Siap sinkronisasi</span>
       <b id="mmSyncPercent">0%</b>
     </div>
     <div class="mm-progress"><span id="mmSyncBar"></span></div>
-    <p class="mm-muted" style="font-size:12px;">
+    <p class="mm-muted mm-sync-hint">
       Sinkronisasi membaca <b>semua</b> script MikroTik (bukan hanya satu halaman), lalu mengimpor per batch.
       Proses manual ini dapat dilanjutkan per batch.
     </p>
-    <label style="display:block;font-weight:normal;margin:8px 0;">
+    <label class="mm-sync-option">
       <input type="checkbox" id="mmDeleteAfterImport" name="delete_after_import" value="1">
-      Setelah semua record penjualan berhasil diimpor, hapus <b>script record penjualan</b> dari MikroTik.
+      <span>Setelah semua record penjualan berhasil diimpor, hapus <b>script record penjualan</b> dari MikroTik.</span>
     </label>
-    <p class="mm-muted" style="font-size:11.5px;margin-top:-4px;">
+    <p class="mm-muted mm-sync-subhint">
       Hanya script record penjualan yang dihapus; script MikroTik lain tidak disentuh.
     </p>
-    <div class="mm-page-actions">
-      <button type="button" class="btn bg-primary" id="mmSyncStart"><i class="fa fa-play"></i> Mulai Sinkronisasi</button>
-      <button type="button" class="btn bg-warning" id="mmSyncCancel" style="display:none;"><i class="fa fa-stop"></i> Batalkan</button>
-      <button type="button" class="btn bg-secondary" id="mmSyncProbe"><i class="fa fa-plug"></i> Tes Koneksi</button>
-      <a class="btn bg-secondary" href="#" title="Close">Tutup</a>
+    <div class="mm-modal-footer">
+      <div class="mm-page-actions">
+        <button type="button" class="btn bg-primary" id="mmSyncStart"><i class="fa fa-play"></i> Mulai Sinkronisasi</button>
+        <button type="button" class="btn bg-warning" id="mmSyncCancel" style="display:none;"><i class="fa fa-stop"></i> Batalkan</button>
+        <button type="button" class="btn bg-secondary" id="mmSyncProbe"><i class="fa fa-plug"></i> Tes Koneksi</button>
+        <a class="btn bg-secondary" href="#" data-modal-close title="Tutup"><i class="fa fa-times"></i> Tutup</a>
+      </div>
+      <div class="mm-sync-badge-row"><span id="mmSyncBadge"><?= mikhmon_source_badge($status); ?></span></div>
     </div>
-    <p style="margin-top:10px;"><span id="mmSyncBadge"><?= mikhmon_source_badge($status); ?></span></p>
   </div>
 </div>
 
 <!-- Delete modal -->
 <div class="modal-window" id="deleteModal" aria-hidden="true">
-  <div>
-    <header><h1><i class="fa fa-trash"></i> Hapus Data</h1></header>
-    <a class="modal-close" href="#" title="Close" aria-label="Close">X</a>
+  <div class="mm-modal-card">
+    <header>
+      <h1><i class="fa fa-trash"></i> Hapus Data</h1>
+      <a class="modal-close" href="#" title="Tutup" aria-label="Tutup"><i class="fa fa-times"></i></a>
+    </header>
     <form method="post" action="<?= mikhmon_e($baseUrl); ?>">
       <?= mikhmon_csrf_field(); ?>
       <input type="hidden" name="delete_data" value="1">
       <p class="mm-muted">Filter aktif: <b><?= mikhmon_e($periodLabel); ?></b><?= $q !== '' ? ' · pencarian: ' . mikhmon_e($q) : ''; ?></p>
-      <label style="display:block;font-weight:normal;"><input type="checkbox" name="del_db" value="1" checked> Hapus dari <b>database</b></label>
-      <label style="display:block;font-weight:normal;"><input type="checkbox" name="del_router" value="1"> Hapus <b>script di MikroTik</b> (lambat, mengikuti filter tanggal/bulan/server)</label>
-      <hr style="border:none;border-top:1px solid #ccc;margin:8px 0;">
-      <label style="display:block;font-weight:normal;"><input type="radio" name="del_scope" value="view" checked> Hanya data yang sedang terfilter</label>
-      <label style="display:block;font-weight:normal;"><input type="radio" name="del_scope" value="all"> Semua data sesi ini</label>
-      <div class="mm-page-actions" style="margin-top:10px;">
-        <button type="submit" class="btn bg-danger"><i class="fa fa-trash"></i> Hapus</button>
-        <a class="btn bg-secondary" href="#" title="Close">Batal</a>
+      <label class="mm-sync-option"><input type="checkbox" name="del_db" value="1" checked> <span>Hapus dari <b>database</b></span></label>
+      <label class="mm-sync-option"><input type="checkbox" name="del_router" value="1"> <span>Hapus <b>script di MikroTik</b> (lambat, mengikuti filter tanggal/bulan/server)</span></label>
+      <hr style="border:none;border-top:1px solid var(--mm-border);margin:10px 0;">
+      <label class="mm-sync-option"><input type="radio" name="del_scope" value="view" checked> <span>Hanya data yang sedang terfilter</span></label>
+      <label class="mm-sync-option"><input type="radio" name="del_scope" value="all"> <span>Semua data sesi ini</span></label>
+      <div class="mm-modal-footer">
+        <div class="mm-page-actions">
+          <button type="submit" class="btn bg-danger"><i class="fa fa-trash"></i> Hapus</button>
+          <a class="btn bg-secondary" href="#" data-modal-close title="Tutup"><i class="fa fa-times"></i> Batal</a>
+        </div>
       </div>
     </form>
   </div>

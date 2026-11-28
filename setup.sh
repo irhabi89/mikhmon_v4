@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# MIKHMON v4 — GHAIB-NETWORK Edition
+# MIKHMON v4 — GHAIB.NET Edition
 # One-command setup for cPanel / Linux.
 #
 # Usage:

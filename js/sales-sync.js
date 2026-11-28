@@ -94,8 +94,11 @@
   }
 
   function reloadClean() {
-    if (window.location.hash === "#mmSyncModal" && window.history && window.history.replaceState) {
-      window.history.replaceState(null, document.title, window.location.pathname + window.location.search);
+    if (window.location.hash === "#mmSyncModal") {
+      window.location.hash = "_";
+      if (window.history && window.history.replaceState) {
+        window.history.replaceState(null, document.title, window.location.pathname + window.location.search);
+      }
     }
     location.reload();
   }

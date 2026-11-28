@@ -1,7 +1,7 @@
-# Changelog — MIKHMON v4 GHAIB-NETWORK Edition
+# Changelog — MIKHMON v4 GHAIB.NET Edition
 
 All notable changes to this edition. This project is based on Mikhmon v3 by
-Laksamadi Guko and is maintained by **PT GHAIB-NETWORK**.
+Laksamadi Guko and is maintained by **GHAIB.NET**.
 Developer: **quiqxiq**.
 
 ## [4.0.0] — 2026-11-26
@@ -24,6 +24,6 @@ Developer: **quiqxiq**.
 ### License and attribution
 
 - Original project: Mikhmon by Laksamadi Guko (GPLv2).
-- Modified and maintained by PT GHAIB-NETWORK.
+- Modified and maintained by GHAIB.NET.
 - Developer: quiqxiq.
 - See `NOTICE.md` for attribution.

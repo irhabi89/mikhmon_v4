@@ -1,7 +1,7 @@
 # Sales sync (SQLite ↔ MikroTik)
 
-**MIKHMON v4 — GHAIB-NETWORK Edition**  
-Maintained by PT GHAIB-NETWORK · Developer: quiqxiq.
+**MIKHMON v4 — GHAIB.NET Edition**  
+Maintained by GHAIB.NET · Developer: quiqxiq.
 
 ## One-time upgrade
 

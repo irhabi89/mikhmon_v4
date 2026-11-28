@@ -24,7 +24,7 @@ body.mm-theme-pink {
   --mm-surface-2: #f4f6f8;
   --mm-border: #d8dde3;
   --mm-text: #2f353a;
-  --mm-muted: #66707a;
+  --mm-muted: #4f5863;
 }
 
 body.mm-theme-green { --mm-primary: #4dbd74; }
@@ -249,7 +249,7 @@ body.mm-theme-blue { --mm-primary: #20a8d8; }
 
 .mm-page-btn:hover { border-color: var(--mm-primary); text-decoration: none; }
 .mm-page-btn.is-active { background: var(--mm-primary); border-color: var(--mm-primary); color: #fff; }
-.mm-page-btn.is-disabled { opacity: .35; pointer-events: none; }
+.mm-page-btn.is-disabled { opacity: .52; pointer-events: none; }
 .mm-page-ellipsis { padding: 0 4px; color: var(--mm-muted); }
 
 .mm-per-page { display: inline-flex; align-items: center; gap: 6px; color: var(--mm-muted); font-size: 12px; }

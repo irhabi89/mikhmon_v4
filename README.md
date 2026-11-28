@@ -1,11 +1,11 @@
-# MIKHMON v4 — GHAIB-NETWORK Edition
+# MIKHMON v4 — GHAIB.NET Edition
 
-[![GHAIB-NETWORK](https://img.shields.io/badge/Maintained%20by-PT%20GHAIB--NETWORK-0b6e99)](https://www.ghaib.net/)
+[![GHAIB.NET](https://img.shields.io/badge/Maintained%20by-GHAIB.NET-0b6e99)](https://www.ghaib.net/)
 [![Developer](https://img.shields.io/badge/Developer-quiqxiq-6f42c1)](https://github.com/quiqxiq)
 
-> **Modified and maintained by PT GHAIB-NETWORK.**  
+> **Modified and maintained by GHAIB.NET.**  
 > **Developer: quiqxiq**  
-> GHAIB-NETWORK is an Indonesian technology company (PT) providing IT
+> GHAIB.NET provides IT
 > solutions, network administration, MikroTik configuration, internet/CCTV
 > installation, fiber-optic cabling, and web development.
 > Website: https://www.ghaib.net/
