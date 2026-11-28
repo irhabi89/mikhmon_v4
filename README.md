@@ -38,8 +38,9 @@ Gunakan `--import-db /path/backup.db` untuk memindahkan data lama dan
 - Sinkronisasi RouterOS bertahap/streaming dan rekonsiliasi data.
 
 Lihat [`CHANGELOG.md`](CHANGELOG.md), [`NOTICE.md`](NOTICE.md),
-[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md), dan
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) untuk detail.
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md),
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), dan
+[`docs/MIKROTIK_COMMANDS.md`](docs/MIKROTIK_COMMANDS.md) untuk detail.
 
 ---
 
