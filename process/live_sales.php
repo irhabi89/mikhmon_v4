@@ -65,8 +65,9 @@ $compareTotal = 0;
 $compareMatched = 0;
 $compareInvalid = 0;
 $compareSeen = array();
+$compareBuffer = array();
 $dbTotal = 0;
-$dbCheck = null;
+$db = null;
 $dbAvailable = false;
 $dbError = '';
 
@@ -76,23 +77,37 @@ try {
     $dbAvailable = true;
     if ($compareMode) {
         $dbTotal = (int)$db->value('SELECT COUNT(*) FROM sales_records WHERE session = ?', array($session));
-        $dbCheck = $db->pdo()->prepare('SELECT 1 FROM sales_records WHERE session = ? AND name = ? LIMIT 1');
     }
 } catch (Throwable $e) {
     $dbAvailable = false;
     $dbError = $e->getMessage();
 }
 
+$flushCompareBuffer = static function () use (&$compareBuffer, &$compareMatched, $dbAvailable, $db, $session) {
+    if (!$dbAvailable || $db === null || empty($compareBuffer)) {
+        $compareBuffer = array();
+        return;
+    }
+    $placeholders = implode(',', array_fill(0, count($compareBuffer), '?'));
+    $params = array_merge(array($session), $compareBuffer);
+    $rows = $db->fetchAll(
+        'SELECT name FROM sales_records WHERE session = ? AND name IN (' . $placeholders . ')',
+        $params
+    );
+    $compareMatched += count($rows);
+    $compareBuffer = array();
+};
+
 session_write_close();
 
 try {
-    $client = mikhmon_safe_router_client($session);
+    $client = mikhmon_safe_router_client($session, $summaryMode);
     $client->connect();
     if (!$summaryMode) {
         echo json_encode(array('type' => 'meta', 'source' => 'router', 'session' => $session, 'db_error' => $dbError)) . "\n";
         flush();
     }
-    $result = $client->stream('/system/script/print', array('.proplist' => '.id,name,comment'), function (array $row) use ($filter, $summaryMode, $compareMode, $dbAvailable, &$count, $today, $month, &$summary, &$compareTotal, &$compareMatched, &$compareInvalid, &$compareSeen, $dbCheck, $session) {
+    $result = $client->stream('/system/script/print', array('.proplist' => '.id,name,comment'), function (array $row) use ($filter, $summaryMode, $compareMode, $dbAvailable, &$count, $today, $month, &$summary, &$compareTotal, &$compareInvalid, &$compareSeen, &$compareBuffer, $flushCompareBuffer) {
         $name = isset($row['name']) ? (string)$row['name'] : '';
         $comment = isset($row['comment']) ? (string)$row['comment'] : '';
         if ($name === '' || !\Mikhmon\Support\RecordParser::isSalesRecord($name, $comment)) { return true; }
@@ -103,12 +118,10 @@ try {
                 $compareInvalid++;
             } else {
                 $compareTotal++;
-                if ($dbAvailable && $dbCheck !== null) {
-                    $dbCheck->execute(array($session, $name));
-                    $found = $dbCheck->fetchColumn() !== false;
-                    $dbCheck->closeCursor();
-                    if ($found) {
-                        $compareMatched++;
+                if ($dbAvailable) {
+                    $compareBuffer[] = $name;
+                    if (count($compareBuffer) >= 500) {
+                        $flushCompareBuffer();
                     }
                 }
             }
@@ -139,8 +152,9 @@ try {
         )), JSON_UNESCAPED_SLASHES) . "\n";
         if ($count % 100 === 0) { echo json_encode(array('type' => 'progress', 'rows' => $count, 'seconds' => round(microtime(true) - $started, 1))) . "\n"; flush(); }
         return true;
-    }, 120.0);
+    }, $summaryMode ? 45.0 : 120.0);
     $client->close();
+    $flushCompareBuffer();
 
     $compare = null;
     if ($compareMode && $dbAvailable) {

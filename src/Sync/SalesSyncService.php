@@ -59,6 +59,7 @@ final class SalesSyncService
     public function start(string $session, array $opts = array()): array
     {
         $this->assertSession($session);
+        $this->runs->recoverStale($session);
         $active = $this->runs->active($session);
         if ($active !== null) {
             return $this->status($session);
@@ -106,6 +107,7 @@ final class SalesSyncService
     public function runNow(string $session, ?string $month = null): array
     {
         $this->assertSession($session);
+        $this->runs->recoverStale($session);
         $active = $this->runs->active($session);
         if ($active !== null) {
             return $this->status($session);
@@ -171,20 +173,26 @@ final class SalesSyncService
                 return $this->status($session);
             }
 
+            $this->records->requeueMissingInSales($session);
             $importer = new Importer($this->db, $this->sales, $this->records, $this->runs);
             $importer->run($session, $runId);
-            $this->runs->update($runId, array('status' => 'verifying', 'phase' => 'verify'));
+            $this->runs->update($runId, array('status' => 'verifying', 'phase' => 'verify', 'heartbeat_at' => date('Y-m-d H:i:s')));
             $result = $this->reconciler->reconcile($session);
             $this->reconciler->persist($runId, $session, $result);
             if (!empty($run['delete_after_import']) && $result['complete'] && (int)$result['missing'] === 0) {
+                $this->runs->update($runId, array('phase' => 'cleanup', 'heartbeat_at' => date('Y-m-d H:i:s')));
                 $this->cleanupImportedScripts($session, $runId, $client);
+                $result = $this->reconciler->reconcile($session);
+                $this->reconciler->persist($runId, $session, $result);
             }
             $this->runs->update($runId, array(
                 'status' => 'done',
                 'phase' => 'done',
                 'finished_at' => date('Y-m-d H:i:s'),
+                'heartbeat_at' => date('Y-m-d H:i:s'),
                 'error' => '',
             ));
+            $this->syncCompareCache($session, $result);
             $client->close();
             return $this->status($session);
         } catch (\Throwable $e) {
@@ -205,6 +213,7 @@ final class SalesSyncService
      */
     public function status(string $session): array
     {
+        $this->runs->recoverStale($session);
         $run = $this->runs->latest($session);
         $active = $run !== null && in_array((string)$run['status'], array('queued', 'scanning', 'importing', 'verifying'), true);
         $recon = $active ? $this->reconciler->light($session) : $this->reconciler->reconcile($session);
@@ -255,6 +264,7 @@ final class SalesSyncService
             'verified' => isset($recon['verified']) ? (bool)$recon['verified'] : (bool)$recon['complete'],
             'in_sync' => (bool)$recon['in_sync'],
             'empty' => (bool)$recon['empty'],
+            'progress' => $this->buildProgress($run, $recon),
             'run' => $run,
             'months' => $months,
             'samples' => $recon['samples'],
@@ -362,12 +372,58 @@ final class SalesSyncService
     }
 
     /**
+     * Single-pass web scan fallback when script count fits safely in one HTTP
+     * request; returns use_months=true if the router exceeds the web threshold.
+     *
+     * @return array<string,mixed>
+     */
+    public function scanFullWeb(string $session, int $runId): array
+    {
+        $run = $this->runs->find($runId);
+        if ($run === null || (string)$run['session'] !== $session) {
+            throw new RouterException('sync run not found');
+        }
+        $maxFull = max(1000, Config::int('MIKHMON_SYNC_WEB_FULL_MAX', 15000));
+        $client = $this->factory->forSession($session);
+        $client->connect();
+        try {
+            $count = $client->count('/system/script/print');
+            if ($count > $maxFull) {
+                $this->runs->update($runId, array(
+                    'expected_scripts' => $count,
+                    'heartbeat_at' => date('Y-m-d H:i:s'),
+                ));
+                $status = $this->status($session);
+                $status['use_months'] = true;
+                return $status;
+            }
+            $scanner = new Scanner($client, $this->records, $this->runs);
+            $result = $scanner->scanFull($session, $runId);
+            $this->runs->update($runId, array(
+                'status' => $result->ok ? 'importing' : 'failed',
+                'phase' => $result->ok ? 'import' : 'scan',
+                'error' => $result->error,
+                'heartbeat_at' => date('Y-m-d H:i:s'),
+            ));
+        } finally {
+            $client->close();
+        }
+        $status = $this->status($session);
+        $status['use_months'] = false;
+        return $status;
+    }
+
+    /**
      * @return array<string,mixed>
      */
     public function importChunk(string $session, int $runId): array
     {
+        $run = $this->runs->find($runId);
+        if ($run !== null && (string)$run['phase'] !== 'import') {
+            $this->records->requeueMissingInSales($session);
+        }
         $importer = new Importer($this->db, $this->sales, $this->records, $this->runs);
-        $importer->run($session, $runId);
+        $importer->run($session, $runId, null, 4);
         return $this->status($session);
     }
 
@@ -380,10 +436,12 @@ final class SalesSyncService
         if ($run === null) {
             throw new RouterException('sync run not found');
         }
+        $this->runs->update($runId, array('status' => 'verifying', 'phase' => 'verify', 'heartbeat_at' => date('Y-m-d H:i:s')));
         $result = $this->reconciler->reconcile($session);
         $this->reconciler->persist($runId, $session, $result);
         if (!empty($run['delete_after_import']) && $result['complete'] && (int)$result['missing'] === 0) {
             try {
+                $this->runs->update($runId, array('phase' => 'cleanup', 'heartbeat_at' => date('Y-m-d H:i:s')));
                 $client = $this->factory->forSession($session);
                 $client->connect();
                 $this->cleanupImportedScripts($session, $runId, $client);
@@ -398,7 +456,10 @@ final class SalesSyncService
             'status' => 'done',
             'phase' => 'done',
             'finished_at' => date('Y-m-d H:i:s'),
+            'heartbeat_at' => date('Y-m-d H:i:s'),
+            'error' => '',
         ));
+        $this->syncCompareCache($session, $result);
         return $this->status($session);
     }
 
@@ -566,7 +627,120 @@ final class SalesSyncService
         } finally {
             $client->close();
         }
+        $this->clearCompareCache($session);
         return $out;
+    }
+
+    /**
+     * @param array<string,mixed>|null $run
+     * @param array<string,mixed>      $recon
+     * @return array{percent:float,indeterminate:bool,phase:string,label:string}
+     */
+    private function buildProgress(?array $run, array $recon): array
+    {
+        if ($run === null) {
+            return array('percent' => 0.0, 'indeterminate' => false, 'phase' => 'idle', 'label' => 'Siap sinkronisasi');
+        }
+        $status = (string)($run['status'] ?? 'idle');
+        $phase = (string)($run['phase'] ?? $status);
+        $expected = (int)($run['expected_scripts'] ?? -1);
+        $scanned = (int)($run['scanned_scripts'] ?? 0);
+
+        if ($status === 'queued' || $phase === 'starting') {
+            return array('percent' => 2.0, 'indeterminate' => true, 'phase' => 'queued', 'label' => 'Menyiapkan sinkronisasi…');
+        }
+        if ($status === 'scanning') {
+            if ($expected > 0) {
+                $ratio = min(1.0, max(0.0, $scanned / $expected));
+                $pct = round(5.0 + $ratio * 55.0, 1);
+                return array(
+                    'percent' => $pct,
+                    'indeterminate' => false,
+                    'phase' => 'scanning',
+                    'label' => 'Memindai script MikroTik (' . number_format($scanned, 0, ',', '.') . ' / ' . number_format($expected, 0, ',', '.') . ')…',
+                );
+            }
+            $pct = $scanned > 0 ? 30.0 : 10.0;
+            $label = $scanned > 0
+                ? 'Memindai script MikroTik (' . number_format($scanned, 0, ',', '.') . ' terbaca)…'
+                : 'Menghubungi MikroTik…';
+            return array('percent' => $pct, 'indeterminate' => true, 'phase' => 'scanning', 'label' => $label);
+        }
+        if ($status === 'importing') {
+            $totalValid = max(0, (int)($recon['router_records'] ?? 0) - (int)($recon['invalid'] ?? 0));
+            $pending = max(0, (int)($recon['pending'] ?? 0));
+            $done = max(0, $totalValid - $pending);
+            $ratio = $totalValid > 0 ? min(1.0, $done / $totalValid) : 1.0;
+            $pct = round(60.0 + $ratio * 35.0, 1);
+            return array(
+                'percent' => $pct,
+                'indeterminate' => false,
+                'phase' => 'importing',
+                'label' => 'Mengimpor ke database (' . number_format($done, 0, ',', '.') . ' / ' . number_format($totalValid, 0, ',', '.') . ')…',
+            );
+        }
+        if ($status === 'verifying') {
+            if ($phase === 'cleanup') {
+                return array('percent' => 98.0, 'indeterminate' => false, 'phase' => 'cleanup', 'label' => 'Membersihkan script penjualan di MikroTik…');
+            }
+            return array('percent' => 96.0, 'indeterminate' => false, 'phase' => 'verifying', 'label' => 'Memverifikasi data & rekonsiliasi…');
+        }
+        if ($status === 'done') {
+            return array('percent' => 100.0, 'indeterminate' => false, 'phase' => 'done', 'label' => 'Sinkronisasi selesai');
+        }
+        if ($status === 'stalled') {
+            return array('percent' => 0.0, 'indeterminate' => false, 'phase' => 'stalled', 'label' => 'Sinkronisasi terhenti (timeout)');
+        }
+        if ($status === 'canceled') {
+            return array('percent' => 0.0, 'indeterminate' => false, 'phase' => 'canceled', 'label' => 'Sinkronisasi dibatalkan');
+        }
+        return array('percent' => 0.0, 'indeterminate' => false, 'phase' => 'failed', 'label' => 'Sinkronisasi gagal');
+    }
+
+    /**
+     * @param array<string,mixed> $recon
+     */
+    private function syncCompareCache(string $session, array $recon): void
+    {
+        $file = Config::baseDir() . '/data/cache/live-compare-' . hash('sha256', $session) . '.json';
+        if (empty($recon['complete'])) {
+            if (is_file($file)) {
+                @unlink($file);
+            }
+            return;
+        }
+        $routerTotal = max(0, (int)($recon['router_records'] ?? 0) - (int)($recon['invalid'] ?? 0));
+        $matched = (int)($recon['matched'] ?? 0);
+        $missing = (int)($recon['missing'] ?? 0);
+        $dbTotal = (int)($recon['db_records'] ?? 0);
+        $compare = array(
+            'type' => 'compare',
+            'source' => 'sync',
+            'router_total' => $routerTotal,
+            'db_total' => $dbTotal,
+            'matched' => $matched,
+            'missing' => $missing,
+            'invalid' => (int)($recon['invalid'] ?? 0),
+            'archive_extra' => max(0, $dbTotal - $matched),
+            'synced_percent' => $routerTotal > 0 ? round($matched / $routerTotal * 100, 1) : null,
+            'unsynced_percent' => $routerTotal > 0 ? round($missing / $routerTotal * 100, 1) : null,
+            'verified' => true,
+            'complete' => true,
+            'checked_at' => date('Y-m-d H:i:s'),
+        );
+        $dir = dirname($file);
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0775, true);
+        }
+        @file_put_contents($file, json_encode($compare, JSON_UNESCAPED_SLASHES));
+    }
+
+    private function clearCompareCache(string $session): void
+    {
+        $file = Config::baseDir() . '/data/cache/live-compare-' . hash('sha256', $session) . '.json';
+        if (is_file($file)) {
+            @unlink($file);
+        }
     }
 
     /**

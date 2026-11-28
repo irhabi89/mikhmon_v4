@@ -188,10 +188,6 @@ $actions = $syncButton
     <div class="mm-card-head">
       <h2><i class="fa fa-list"></i> <?= mikhmon_e($periodLabel); ?></h2>
       <div class="mm-page-actions">
-        <span class="mm-muted" id="mmAutoRefreshStatus"><?= !$useLiveFallback ? 'Auto-refresh ' . (int)$autoReloadSeconds . 'd' : 'Live MikroTik (' . (int)$autoReloadSeconds . 'd)'; ?></span>
-        <?php if (!$useLiveFallback): ?>
-          <button type="button" class="btn bg-secondary" id="mmAutoRefreshToggle" style="padding:3px 8px;font-size:12px;">Jeda</button>
-        <?php endif; ?>
         <span class="mm-muted" id="mmReportTotal">Total: <b><?= number_format($filterTotal, 0, ',', '.'); ?></b> transaksi · <b><?= mikhmon_e($fmt($filterSum)); ?></b></span>
       </div>
     </div>
@@ -248,7 +244,6 @@ $actions = $syncButton
         <div id="mmLiveSales" class="mm-live-panel" data-session="<?= mikhmon_e($session); ?>">
           <div class="mm-live-actions">
             <span id="mmLiveInfo" class="mm-muted">Menghubungi router...</span>
-            <button type="button" class="btn bg-secondary" id="mmLiveStop" style="display:none;">Stop</button>
           </div>
           <div id="mmLiveWarning" class="mm-alert mm-alert-warning" style="display:none;">
             <span id="mmLiveWarningText"></span>
@@ -272,11 +267,10 @@ $actions = $syncButton
           var body = document.getElementById('mmLiveBody');
           var wrap = document.getElementById('mmLiveWrap');
           var empty = document.getElementById('mmLiveEmpty');
-          var stop = document.getElementById('mmLiveStop');
           var pager = document.getElementById('mmLivePager');
           var controller = null;
           var refreshTimer = 0;
-          var stopped = false;
+          var inFlight = false;
           var allRows = [];
           var page = 1;
           var perPage = 50;
@@ -354,14 +348,17 @@ $actions = $syncButton
             pendingRender = window.setTimeout(function () { pendingRender = 0; renderPage(); }, 120);
           }
           function scheduleRefresh() {
-            if (stopped) { return; }
             if (refreshTimer) { clearTimeout(refreshTimer); }
             refreshTimer = window.setTimeout(loadLive, autoReloadMs);
           }
           function loadLive() {
-            if (stopped) { return; }
+            if (inFlight || document.hidden || window.MM_SYNC_BUSY) {
+              scheduleRefresh();
+              return;
+            }
             if (controller) { try { controller.abort(); } catch (e) {} }
             controller = new AbortController();
+            inFlight = true;
             var nextRows = [];
             var hadRows = allRows.length > 0;
             setInfo('Memperbarui data MikroTik...');
@@ -396,11 +393,12 @@ $actions = $syncButton
                         setInfo('Selesai: ' + Number(event.rows).toLocaleString('id-ID') + ' record dari MikroTik.');
                         window.MM_LIVE_COUNT = Number(event.rows) || 0;
                         document.dispatchEvent(new CustomEvent('mm-live-sales-loaded', {detail: {count: window.MM_LIVE_COUNT}}));
-                        if (stop) { stop.style.display = 'none'; }
+                        inFlight = false;
                         scheduleRefresh();
                       }
                       if (event.type === 'error') {
                         setInfo('Gagal membaca MikroTik: ' + event.error);
+                        inFlight = false;
                         scheduleRefresh();
                       }
                     });
@@ -410,19 +408,11 @@ $actions = $syncButton
                 return pump();
               })
               .catch(function (err) {
-                if (err && err.name === 'AbortError') { return; }
+                inFlight = false;
+                if (err && err.name === 'AbortError') { scheduleRefresh(); return; }
                 setInfo('Gagal membaca MikroTik: ' + err.message + '. Data terakhir dipertahankan.');
                 scheduleRefresh();
               });
-          }
-          if (stop) {
-            stop.style.display = '';
-            stop.onclick = function () {
-              stopped = true;
-              if (refreshTimer) { clearTimeout(refreshTimer); }
-              if (controller) { controller.abort(); }
-              setInfo('Dihentikan. Data yang sudah tampil tetap ada.');
-            };
           }
           var cta = document.getElementById('mmLiveSyncCta');
           if (cta) { cta.addEventListener('click', function () { document.dispatchEvent(new CustomEvent('mm-start-sync')); }); }
@@ -470,11 +460,9 @@ $actions = $syncButton
         <script>
         (function () {
           var autoReloadMs = <?= (int)$autoReloadMs; ?>;
-          var autoReloadSec = <?= (int)$autoReloadSeconds; ?>;
           var sessionName = <?= json_encode((string)$session); ?>;
           var currency = <?= json_encode((string)$currency); ?>;
           var decimals = <?= (int)$decimals; ?>;
-          var paused = false;
           var timer = 0;
           var inFlight = false;
 
@@ -485,10 +473,6 @@ $actions = $syncButton
           function setText(id, value) {
             var el = document.getElementById(id);
             if (el) { el.textContent = value; }
-          }
-
-          function setStatusText(text) {
-            setText('mmAutoRefreshStatus', text);
           }
 
           function updateCompareBanner(c) {
@@ -567,7 +551,7 @@ $actions = $syncButton
           }
 
           function runCycle() {
-            if (paused || inFlight || window.MM_SYNC_BUSY) {
+            if (inFlight || document.hidden || window.MM_SYNC_BUSY) {
               scheduleNext();
               return;
             }
@@ -594,14 +578,9 @@ $actions = $syncButton
               .then(function (d) {
                 if (d && d.ok && d.compare) {
                   updateCompareBanner(d.compare);
-                  setStatusText('Auto-refresh ' + autoReloadSec + 'd · cek: ' + (d.compare.checked_at || '').slice(11));
-                } else if (d && d.error) {
-                  setStatusText('Auto-refresh ' + autoReloadSec + 'd · router offline');
                 }
               })
-              .catch(function () {
-                setStatusText('Auto-refresh ' + autoReloadSec + 'd · cek live gagal');
-              });
+              .catch(function () { /* keep last compare state */ });
 
             Promise.all([pDb, pCmp]).then(function () {
               inFlight = false;
@@ -613,24 +592,8 @@ $actions = $syncButton
           }
 
           function scheduleNext() {
-            if (paused) { return; }
             if (timer) { clearTimeout(timer); }
             timer = window.setTimeout(runCycle, autoReloadMs);
-          }
-
-          var toggleBtn = document.getElementById('mmAutoRefreshToggle');
-          if (toggleBtn) {
-            toggleBtn.addEventListener('click', function () {
-              paused = !paused;
-              toggleBtn.textContent = paused ? 'Lanjut' : 'Jeda';
-              if (paused) {
-                if (timer) { clearTimeout(timer); }
-                setStatusText('Auto-refresh dijeda');
-              } else {
-                setStatusText('Auto-refresh ' + autoReloadSec + 'd');
-                runCycle();
-              }
-            });
           }
 
           var alertBtn = document.getElementById('mmSyncAlertBtn');
@@ -653,7 +616,11 @@ $actions = $syncButton
   <div>
     <header><h1><i class="fa fa-refresh"></i> Sinkronisasi Penjualan</h1></header>
     <a class="modal-close" href="#" title="Close" aria-label="Close">X</a>
-    <p id="mmSyncInfo" class="mm-muted">Memuat status...</p>
+    <div id="mmSyncInfo" class="mm-muted" style="line-height:1.5;">Memuat status...</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px;margin-top:8px;">
+      <span id="mmSyncPhase" class="mm-muted">Siap sinkronisasi</span>
+      <b id="mmSyncPercent">0%</b>
+    </div>
     <div class="mm-progress"><span id="mmSyncBar"></span></div>
     <p class="mm-muted" style="font-size:12px;">
       Sinkronisasi membaca <b>semua</b> script MikroTik (bukan hanya satu halaman), lalu mengimpor per batch.

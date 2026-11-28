@@ -135,4 +135,42 @@ final class SyncRunRepository
             array(date('Y-m-d H:i:s'), $session, date('Y-m-d H:i:s', time() - 120))
         );
     }
+
+    /**
+     * Recover queued/active runs whose worker never started or stopped
+     * heartbeating, so a dead worker never blocks future syncs.
+     */
+    public function recoverStale(string $session, int $queuedTimeoutSec = 30, int $heartbeatTimeoutSec = 90): int
+    {
+        $now = date('Y-m-d H:i:s');
+        $queuedCutoff = date('Y-m-d H:i:s', time() - max(5, $queuedTimeoutSec));
+        $hbCutoff = date('Y-m-d H:i:s', time() - max(15, $heartbeatTimeoutSec));
+
+        $recovered = $this->db->execute(
+            "UPDATE sales_sync_runs
+             SET status = 'failed',
+                 error = 'worker gagal memulai (timeout)',
+                 finished_at = ?
+             WHERE session = ?
+               AND status = 'queued'
+               AND started_at < ?
+               AND (heartbeat_at = '' OR heartbeat_at < ?)",
+            array($now, $session, $queuedCutoff, $queuedCutoff)
+        );
+
+        $recovered += $this->db->execute(
+            "UPDATE sales_sync_runs
+             SET status = 'stalled',
+                 error = 'worker heartbeat timeout',
+                 finished_at = ?
+             WHERE session = ?
+               AND status IN ('scanning','importing','verifying')
+               AND worker = 'cli'
+               AND heartbeat_at != ''
+               AND heartbeat_at < ?",
+            array($now, $session, $hbCutoff)
+        );
+
+        return $recovered;
+    }
 }

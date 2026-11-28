@@ -70,6 +70,12 @@ try {
         case 'cancel':
             echo json_encode($service->cancel($session, $runId), JSON_UNESCAPED_SLASHES);
             break;
+        case 'scan_full':
+            if ($runId <= 0) {
+                throw new RuntimeException('run_id wajib');
+            }
+            echo json_encode($service->scanFullWeb($session, $runId), JSON_UNESCAPED_SLASHES);
+            break;
         case 'scan_month':
             if ($runId <= 0 || $month === '') {
                 throw new RuntimeException('run_id dan month wajib');

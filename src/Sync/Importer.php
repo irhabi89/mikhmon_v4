@@ -51,7 +51,7 @@ final class Importer
      *
      * @return array{inserted:int,existing:int,invalid:int,failed:int,imported:int,cancelled:bool}
      */
-    public function run(string $session, int $runId, ?callable $progress = null): array
+    public function run(string $session, int $runId, ?callable $progress = null, int $maxBatches = 0): array
     {
         $this->runs->update($runId, array(
             'status' => 'importing',
@@ -64,12 +64,17 @@ final class Importer
         $invalid = 0;
         $failed = 0;
         $cancelled = false;
+        $batches = 0;
 
         while (true) {
+            if ($maxBatches > 0 && $batches >= $maxBatches) {
+                break;
+            }
             $pending = $this->records->pendingBatch($session, $this->batch);
             if (empty($pending)) {
                 break;
             }
+            $batches++;
 
             $importedNames = array();
             $invalidNames = array();

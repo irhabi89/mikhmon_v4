@@ -256,4 +256,24 @@ SQL;
     {
         return $this->db->execute('DELETE FROM sales_router_records WHERE session = ?', array($session));
     }
+
+    /**
+     * Reset rows marked 'imported' that are missing from sales_records back to 'pending'
+     * so a subsequent import recovers records deleted or lost from the local table.
+     */
+    public function requeueMissingInSales(string $session): int
+    {
+        return $this->db->execute(
+            "UPDATE sales_router_records
+             SET state = 'pending'
+             WHERE session = ?
+               AND state = 'imported'
+               AND NOT EXISTS (
+                 SELECT 1 FROM sales_records d
+                 WHERE d.session = sales_router_records.session
+                   AND d.name = sales_router_records.name
+               )",
+            array($session)
+        );
+    }
 }

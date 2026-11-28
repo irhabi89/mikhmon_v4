@@ -192,4 +192,71 @@ final class SyncPipelineTest extends TestCase
         $this->assertNotNull($records->find('s1', 'system backup script'));
     }
 
+    public function testStaleRunRecoveryAndProgressAndRequeueMissing(): void
+    {
+        $runs = new SyncRunRepository($this->db);
+        $records = new RouterRecordRepository($this->db);
+        $sales = new SalesRepository($this->db);
+        $svc = new \Mikhmon\Sync\SalesSyncService($this->db);
+
+        // 1. Stale CLI run with old heartbeat must recover automatically so status() is not stuck.
+        $staleId = $runs->create('s1', 'full', 'cli', 100);
+        $old = date('Y-m-d H:i:s', time() - 300);
+        $runs->update($staleId, array('status' => 'scanning', 'phase' => 'scan', 'heartbeat_at' => $old, 'started_at' => $old));
+        $status = $svc->status('s1');
+        $this->assertSame('stalled', $status['run']['status']);
+        $this->assertSame(0.0, (float)$status['progress']['percent']);
+
+        // 2. Progress percentages reflect scanning (5..60), importing (60..95), done (100).
+        $runId = $runs->create('s1', 'full', 'cli', 100);
+        $runs->update($runId, array('status' => 'scanning', 'phase' => 'scan', 'scanned_scripts' => 50, 'heartbeat_at' => date('Y-m-d H:i:s')));
+        $stScan = $svc->status('s1');
+        $this->assertGreaterThan(30.0, (float)$stScan['progress']['percent']);
+        $this->assertLessThan(60.0, (float)$stScan['progress']['percent']);
+
+        $row = $this->rows(1)[0];
+        $records->upsertMany(array(array('s1', $row['name'], $row['.id'], 'mikhmon', 'hotspot1', 'imported', '')), $runId);
+        // Simulate missing from sales_records even though snapshot says 'imported'.
+        $requeued = $records->requeueMissingInSales('s1');
+        $this->assertSame(1, $requeued);
+
+        $importer = new Importer($this->db, $sales, $records, $runs, 500);
+        $imp = $importer->run('s1', $runId);
+        $this->assertSame(1, $imp['inserted']);
+        $this->assertSame(1, $sales->count('s1'));
+
+        $runs->update($runId, array('complete' => 1));
+        $svc->verify('s1', $runId);
+        $stDone = $svc->status('s1');
+        $this->assertSame(100.0, (float)$stDone['progress']['percent']);
+        $this->assertTrue($stDone['in_sync']);
+    }
+
+    public function testScannerCountFallbackStillCompletesViaStream(): void
+    {
+        $runs = new SyncRunRepository($this->db);
+        $records = new RouterRecordRepository($this->db);
+        $rows = $this->rows(3);
+        $fake = new class($rows) implements RouterClientInterface {
+            private $rows;
+            public function __construct(array $rows) { $this->rows = $rows; }
+            public function connect(): void {}
+            public function count(string $command, array $queries = array()): int { return -1; }
+            public function stream(string $command, array $attributes, callable $onRow, ?float $timeout = null): ScanResult {
+                $r = new ScanResult();
+                foreach ($this->rows as $row) { $onRow($row); $r->seen++; }
+                return $r;
+            }
+            public function command(string $command, array $attributes = array()): array { return array(); }
+            public function close(): void {}
+            public function isConnected(): bool { return true; }
+            public function lastError(): string { return 'count timeout'; }
+        };
+        $runId = $runs->create('s1', 'full', 'cli', -1);
+        $res = (new Scanner($fake, $records, $runs, 500))->scanFull('s1', $runId);
+        $this->assertTrue($res->complete);
+        $this->assertSame(3, $res->seen);
+        $this->assertSame(3, $res->expected);
+    }
+
 }

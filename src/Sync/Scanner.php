@@ -50,10 +50,6 @@ final class Scanner
     public function scanFull(string $session, int $runId, ?callable $progress = null): ScanResult
     {
         $expected = $this->client->count('/system/script/print');
-        if ($expected < 0) {
-            throw new RouterException('cannot count router scripts: ' . $this->client->lastError());
-        }
-
         $this->runs->update($runId, array('expected_scripts' => $expected));
 
         $result = $this->scanCommand(
@@ -66,8 +62,11 @@ final class Scanner
             $progress
         );
 
-        $complete = $result->ok && $result->seen >= $expected;
+        $complete = $result->ok && ($expected < 0 || $result->seen >= $expected);
         if ($complete) {
+            if ($expected < 0) {
+                $expected = $result->seen;
+            }
             // The snapshot is a complete view at this point: drop rows that
             // disappeared from the router. DB rows are left as archive/extra.
             $this->records->deleteNotSeen($session, $runId);
@@ -188,12 +187,13 @@ final class Scanner
         $records = 0;
         $invalid = 0;
         $cancelled = false;
-        $flush = function () use (&$batch, $runId, &$seen, &$records, &$invalid) {
-            if (empty($batch)) {
-                return;
+        $lastFlushAt = microtime(true);
+        $flush = function () use (&$batch, $runId, &$seen, &$records, &$invalid, &$lastFlushAt) {
+            $lastFlushAt = microtime(true);
+            if (!empty($batch)) {
+                $this->records->upsertMany($batch, $runId);
+                $batch = array();
             }
-            $this->records->upsertMany($batch, $runId);
-            $batch = array();
             $this->runs->update($runId, array(
                 'scanned_scripts' => $seen,
                 'router_records' => $records,
@@ -205,7 +205,7 @@ final class Scanner
         $result = $this->client->stream(
             $command,
             array_merge($attributes, $queries),
-            function (array $row) use ($session, &$batch, &$seen, &$records, &$invalid, &$cancelled, $flush, $runId, $progress) {
+            function (array $row) use ($session, &$batch, &$seen, &$records, &$invalid, &$cancelled, &$lastFlushAt, $flush, $runId, $progress) {
                 $seen++;
                 $name = isset($row['name']) ? (string)$row['name'] : '';
                 if ($name === '') {
@@ -213,6 +213,9 @@ final class Scanner
                 }
                 $comment = isset($row['comment']) ? (string)$row['comment'] : '';
                 if (!RecordParser::isSalesRecord($name, $comment)) {
+                    if (($seen % 250) === 0 || (microtime(true) - $lastFlushAt) >= 1.5) {
+                        $flush();
+                    }
                     return true;
                 }
                 $rosId = isset($row['.id']) ? (string)$row['.id'] : '';
@@ -226,7 +229,7 @@ final class Scanner
                     $batch[] = array($session, $name, $rosId, $comment, $serverName, 'pending', '');
                 }
 
-                if (count($batch) >= $this->batch) {
+                if (count($batch) >= $this->batch || (microtime(true) - $lastFlushAt) >= 1.5) {
                     $flush();
                 }
                 if ($progress !== null) {

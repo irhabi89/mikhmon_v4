@@ -45,7 +45,7 @@ if (!function_exists('mikhmon_safe_session_row')) {
 }
 
 if (!function_exists('mikhmon_safe_router_client')) {
-    function mikhmon_safe_router_client(string $session): \Mikhmon\Router\RouterClientInterface
+    function mikhmon_safe_router_client(string $session, bool $fast = false): \Mikhmon\Router\RouterClientInterface
     {
         $row = mikhmon_safe_session_row($session);
         if (!is_array($row)) {
@@ -61,13 +61,21 @@ if (!function_exists('mikhmon_safe_router_client')) {
             isset($row['port_host']) ? (int)$row['port_host'] : 8728
         );
         $password = \decrypt(isset($row['pass_host']) ? (string)$row['pass_host'] : '');
-        $options = array(
-            'attempts' => 2,
-            'delay' => 1,
-            'timeout' => 5,
-            'read_timeout' => 300,
-            'debug' => false,
-        );
+        $options = $fast
+            ? array(
+                'attempts' => 1,
+                'delay' => 0,
+                'timeout' => 3,
+                'read_timeout' => 30,
+                'debug' => false,
+            )
+            : array(
+                'attempts' => 2,
+                'delay' => 1,
+                'timeout' => 5,
+                'read_timeout' => 300,
+                'debug' => false,
+            );
         return new \Mikhmon\Router\NativeRouterClient(
             $target,
             isset($row['user_host']) ? (string)$row['user_host'] : '',
@@ -91,5 +99,15 @@ if (!function_exists('mikhmon_write_live_compare_cache')) {
             $cacheDir . '/live-compare-' . hash('sha256', $session) . '.json',
             json_encode($compare, JSON_UNESCAPED_SLASHES)
         );
+    }
+}
+
+if (!function_exists('mikhmon_clear_live_compare_cache')) {
+    function mikhmon_clear_live_compare_cache(string $session): void
+    {
+        $file = dirname(__DIR__) . '/data/cache/live-compare-' . hash('sha256', $session) . '.json';
+        if (is_file($file)) {
+            @unlink($file);
+        }
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Sales sync UI: status polling, start/cancel, chunked month scan and import.
+ * Sales sync UI: status polling, start/cancel, fast single-pass or chunked scan & import.
  * Config is provided by the report page as window.MM_SYNC.
  */
 (function () {
@@ -12,6 +12,7 @@
   var polling = false;
   var running = false;
   var liveCompare = null;
+  var lastRun = null;
 
   function $(id) { return document.getElementById(id); }
   function esc(value) {
@@ -55,46 +56,82 @@
     });
   }
 
-  function setProgress(percent, indeterminate) {
+  function setProgress(percent, indeterminate, phaseLabel) {
     var bar = $("mmSyncBar");
-    if (!bar) { return; }
-    var wrap = bar.parentNode;
-    if (indeterminate) {
-      if (wrap) { wrap.classList.add("is-indeterminate"); }
-      bar.style.width = "35%";
-      return;
+    var pctEl = $("mmSyncPercent");
+    var phaseEl = $("mmSyncPhase");
+    var clamped = Math.max(0, Math.min(100, Number(percent || 0)));
+    if (bar) {
+      var wrap = bar.parentNode;
+      if (indeterminate) {
+        if (wrap) { wrap.classList.add("is-indeterminate"); }
+        bar.style.width = "35%";
+      } else {
+        if (wrap) { wrap.classList.remove("is-indeterminate"); }
+        bar.style.width = clamped + "%";
+      }
     }
-    if (wrap) { wrap.classList.remove("is-indeterminate"); }
-    bar.style.width = Math.max(0, Math.min(100, percent || 0)) + "%";
+    if (pctEl) {
+      pctEl.textContent = indeterminate && clamped <= 0
+        ? "..."
+        : (clamped.toLocaleString("id-ID", { maximumFractionDigits: 1 }) + "%");
+    }
+    if (phaseEl && phaseLabel) {
+      phaseEl.textContent = phaseLabel;
+    }
+  }
+
+  function updateStartButton(missing, inSync) {
+    var startBtn = $("mmSyncStart");
+    if (!startBtn || running) { return; }
+    if (Number(missing || 0) > 0) {
+      startBtn.innerHTML = '<i class="fa fa-play"></i> Sinkronkan (' + fmt(missing) + ')';
+    } else if (inSync) {
+      startBtn.innerHTML = '<i class="fa fa-refresh"></i> Sinkronkan Ulang';
+    } else {
+      startBtn.innerHTML = '<i class="fa fa-play"></i> Mulai Sinkronisasi';
+    }
+  }
+
+  function reloadClean() {
+    if (window.location.hash === "#mmSyncModal" && window.history && window.history.replaceState) {
+      window.history.replaceState(null, document.title, window.location.pathname + window.location.search);
+    }
+    location.reload();
   }
 
   function renderLiveCompare(c) {
     if (!c || running || polling) { return; }
     var info = $("mmSyncInfo");
     var badge = $("mmSyncBadge");
+    var missing = Number(c.missing || 0);
+    var invalid = Number(c.invalid || 0);
     if (info) {
-      info.innerHTML = "MikroTik live: <b>" + fmt(c.router_total) + "</b> record &nbsp;|&nbsp; "
-        + "Database: <b>" + fmt(c.db_total) + "</b> &nbsp;|&nbsp; "
-        + "Cocok: <b>" + fmt(c.matched) + "</b> &nbsp;|&nbsp; "
-        + "Belum: <b class='" + (Number(c.missing || 0) > 0 ? "text-orange" : "text-green") + "'>" + fmt(c.missing) + "</b>"
+      info.innerHTML = "MikroTik live: <b>" + fmt(c.router_total) + "</b> record valid"
+        + (invalid > 0 ? " <span class='mm-muted'>(" + fmt(invalid) + " invalid)</span>" : "")
+        + " &nbsp;|&nbsp; Database: <b>" + fmt(c.db_total) + "</b>"
+        + " &nbsp;|&nbsp; Cocok: <b>" + fmt(c.matched) + "</b>"
+        + " &nbsp;|&nbsp; Belum: <b class='" + (missing > 0 ? "text-orange" : "text-green") + "'>" + fmt(missing) + "</b>"
         + (c.unsynced_percent !== null && typeof c.unsynced_percent !== "undefined" ? " (" + pct(c.unsynced_percent) + ")" : "")
-        + (c.archive_extra ? "<br><span class='mm-muted'>Arsip DB: " + fmt(c.archive_extra) + " · bukan kegagalan sync</span>" : "");
-      if (c.checked_at) { info.innerHTML += "<br><span class='mm-muted'>Perbandingan live: " + esc(c.checked_at) + "</span>"; }
+        + (c.archive_extra ? "<br><span class='mm-muted'>Arsip DB: " + fmt(c.archive_extra) + " · bukan kegagalan sync</span>" : "")
+        + (c.checked_at ? "<br><span class='mm-muted'>Perbandingan live: " + esc(c.checked_at) + "</span>" : "");
     }
-    if (badge && !running) {
-      var missing = Number(c.missing || 0);
+    if (badge) {
       badge.className = "mm-badge " + (missing === 0 ? "bg-green text-white" : "bg-orange text-white");
-      badge.innerHTML = '<i class="fa fa-refresh"></i> ' + (missing === 0 ? "Data live sudah cocok" : "Belum tersinkron " + (c.unsynced_percent !== null ? pct(c.unsynced_percent) : "") + " (" + fmt(missing) + ")");
+      badge.innerHTML = '<i class="fa fa-refresh"></i> ' + (missing === 0 ? "100% Sinkron" : "Belum tersinkron " + fmt(missing) + " (" + pct(c.unsynced_percent) + ")");
     }
     var pageWrap = $("mmPageSourceWrap");
-    if (pageWrap && !running) {
-      var pageMissing = Number(c.missing || 0);
-      var cls = pageMissing === 0 ? "bg-green text-white" : "bg-orange text-white";
-      var label = pageMissing === 0
+    if (pageWrap) {
+      var cls = missing === 0 ? "bg-green text-white" : "bg-orange text-white";
+      var label = missing === 0
         ? '<i class="fa fa-check"></i> 100% Sinkron' + (c.archive_extra ? ' · ' + fmt(c.archive_extra) + ' arsip DB' : '')
-        : '<i class="fa fa-refresh"></i> Belum tersinkron ' + fmt(pageMissing) + (c.unsynced_percent !== null ? ' (' + pct(c.unsynced_percent) + ')' : '');
+        : '<i class="fa fa-refresh"></i> Belum tersinkron ' + fmt(missing) + (c.unsynced_percent !== null ? ' (' + pct(c.unsynced_percent) + ')' : '');
       pageWrap.innerHTML = '<span class="mm-badge ' + cls + '">' + label + '</span>';
     }
+    if (c.synced_percent !== null && typeof c.synced_percent !== "undefined") {
+      setProgress(Number(c.synced_percent), false, missing === 0 ? "Data live sudah sinkron" : "Ditemukan data belum tersinkron");
+    }
+    updateStartButton(missing, missing === 0);
   }
 
   function render(data) {
@@ -104,34 +141,42 @@
     var router = data.router || {};
     var db = data.db || {};
     var run = data.run || null;
+    var prog = data.progress || null;
+    lastRun = run;
+
+    var active = run && ["queued", "starting", "scanning", "importing", "verifying"].indexOf(String(run.status)) !== -1;
+
+    if (!active && liveCompare && (!run || (run.status === "done" && (!run.finished_at || (liveCompare.checked_at && liveCompare.checked_at >= run.finished_at))))) {
+      renderLiveCompare(liveCompare);
+      return;
+    }
 
     var liveCount = Number(window.MM_LIVE_COUNT || 0);
     if (info) {
-      var parts = [];
-      if (!run && liveCompare) {
-        renderLiveCompare(liveCompare);
-        return;
-      }
       if (liveCount > 0 && !Number(db.total || 0) && !run) {
         info.innerHTML = "MikroTik live: <b>" + fmt(liveCount) + "</b> record &nbsp;|&nbsp; Database: <b>0</b> &nbsp;|&nbsp; <b class='text-orange'>Belum diimpor</b>";
+        setProgress(0, false, "Siap impor dari MikroTik");
+        updateStartButton(liveCount, false);
         return;
       }
-      parts.push("MikroTik: <b>" + (router.records != null ? fmt(router.records) : "?") + "</b> record");
-      if (Number(router.scanned_scripts || 0) > 0) { parts.push("Scan: <b>" + fmt(router.scanned_scripts) + "</b> script"); }
-      parts.push("Database: <b>" + fmt(db.total) + "</b> transaksi");
+      var validRouter = Math.max(0, Number(router.records || 0) - Number(db.invalid || 0));
+      var parts = [];
+      parts.push("MikroTik: <b>" + (router.records != null ? fmt(validRouter) : "?") + "</b> record valid");
+      if (Number(router.scanned_scripts || 0) > 0) {
+        parts.push("Scan: <b>" + fmt(router.scanned_scripts) + "</b>" + (Number(router.expected_scripts || 0) > 0 ? " / " + fmt(router.expected_scripts) : "") + " script");
+      }
+      parts.push("Database: <b>" + fmt(db.total) + "</b>");
       parts.push("Cocok: <b>" + fmt(db.matched) + "</b>");
-      if (db.missing) { parts.push("<b class='text-red'>" + fmt(db.missing) + "</b> belum diimpor"); }
-      if (db.extra !== null && typeof db.extra !== "undefined" && db.extra > 0) { parts.push("<b>" + fmt(db.extra) + "</b> arsip di database"); }
-      if (db.invalid) { parts.push("<b class='text-red'>" + fmt(db.invalid) + "</b> invalid"); }
+      if (db.missing) { parts.push("<b class='text-orange'>" + fmt(db.missing) + "</b> belum diimpor"); }
+      if (db.invalid) { parts.push("<span class='mm-muted'>" + fmt(db.invalid) + " invalid</span>"); }
       if (data.unsynced_percent !== null && typeof data.unsynced_percent !== "undefined") {
-        parts.push("<b class='text-orange'>" + pct(data.unsynced_percent) + "</b> belum tersinkron (" + fmt(data.unsynced || db.missing) + ")");
-      } else {
+        parts.push("<b class='" + (Number(data.unsynced || 0) > 0 ? "text-orange" : "text-green") + "'>" + pct(data.unsynced_percent) + "</b> belum tersinkron");
+      } else if (!active) {
         parts.push("<b>Belum diverifikasi</b>");
       }
       if (data.archive_extra !== null && typeof data.archive_extra !== "undefined" && data.archive_extra > 0) {
-        parts.push(fmt(data.archive_extra) + " arsip DB");
+        parts.push("<span class='mm-muted'>" + fmt(data.archive_extra) + " arsip DB</span>");
       }
-      if (run && run.status) { parts.push("Status: <b>" + esc(run.status) + "</b>" + (run.phase ? " / " + esc(run.phase) : "")); }
       info.innerHTML = parts.join(" &nbsp;|&nbsp; ");
     }
 
@@ -139,9 +184,9 @@
       if (data.empty) {
         badge.className = "mm-badge bg-grey text-white";
         badge.innerHTML = "Belum ada data";
-      } else if (data.in_sync) {
+      } else if (data.in_sync || (data.verified && Number(data.unsynced || 0) === 0)) {
         badge.className = "mm-badge bg-green text-white";
-        badge.innerHTML = '<i class="fa fa-check"></i> 100% Sinkron';
+        badge.innerHTML = '<i class="fa fa-check"></i> 100% Sinkron' + (data.archive_extra ? ' · ' + fmt(data.archive_extra) + ' arsip DB' : '');
       } else if (data.unsynced_percent !== null && typeof data.unsynced_percent !== "undefined") {
         badge.className = "mm-badge " + (Number(data.unsynced || 0) === 0 ? "bg-blue text-white" : "bg-orange text-white");
         badge.innerHTML = '<i class="fa fa-refresh"></i> Belum tersinkron ' + pct(data.unsynced_percent) + ' (' + fmt(data.unsynced || 0) + ')';
@@ -151,18 +196,15 @@
       }
     }
 
-    var expected = Number(router.expected_scripts || 0);
-    var seen = Number(router.scanned_scripts || 0);
-    var active = run && ["queued", "starting", "scanning", "importing", "verifying"].indexOf(String(run.status)) !== -1;
-    if (active && expected <= 0) {
-      setProgress(10, true);
-    } else if (expected > 0) {
-      setProgress(Math.min(100, seen / expected * 100), false);
+    if (prog) {
+      setProgress(prog.percent, !!prog.indeterminate, prog.label || "");
+    } else if (active) {
+      setProgress(10, true, "Memproses sinkronisasi…");
     } else if (run && run.status === "done") {
-      setProgress(100, false);
+      setProgress(100, false, "Sinkronisasi selesai");
     }
 
-    if (run && run.status === "failed" && info) {
+    if (run && (run.status === "failed" || run.status === "stalled") && info) {
       info.innerHTML += "<br><b class='text-red'>" + esc(run.error || "sync gagal") + "</b>";
     }
     if (run && Number(run.deleted_router || 0) > 0 && info) {
@@ -170,6 +212,9 @@
     }
     if (run && run.delete_error && info) {
       info.innerHTML += "<br><span class='text-red'>Sebagian penghapusan gagal: " + esc(run.delete_error) + "</span>";
+    }
+    if (!active) {
+      updateStartButton(Number(data.unsynced || db.missing || 0), !!data.in_sync || (!!data.verified && Number(data.unsynced || 0) === 0));
     }
   }
 
@@ -194,7 +239,8 @@
           polling = false;
           setRunning(false);
           if (data.in_sync || (run && status === "done")) {
-            setTimeout(function () { location.reload(); }, 700);
+            setProgress(100, false, "Sinkronisasi selesai · memuat ulang…");
+            setTimeout(reloadClean, 700);
           }
         }
       }).catch(function (err) {
@@ -215,36 +261,54 @@
   function setRunning(value) {
     running = value;
     window.MM_SYNC_BUSY = !!value;
-    var start = $("mmSyncStart");
-    var cancel = $("mmSyncCancel");
-    var importBtn = $("mmSyncImport");
-    if (start) { start.style.display = value ? "none" : ""; }
-    if (cancel) { cancel.style.display = value ? "" : "none"; }
-    if (importBtn) { importBtn.disabled = value; }
+    var startBtn = $("mmSyncStart");
+    var cancelBtn = $("mmSyncCancel");
+    var probeBtn = $("mmSyncProbe");
+    if (startBtn) { startBtn.style.display = value ? "none" : ""; }
+    if (cancelBtn) { cancelBtn.style.display = value ? "" : "none"; }
+    if (probeBtn) { probeBtn.disabled = value; }
   }
 
   function showError(message) {
     var info = $("mmSyncInfo");
-    if (info) { info.innerHTML = "<b class='text-red'>" + esc(message) + "</b>"; }
+    if (info && message) { info.innerHTML = "<b class='text-red'>" + esc(message) + "</b>"; }
+    if (message) { setProgress(0, false, "Terjadi kesalahan"); }
   }
 
   function start() {
     setRunning(true);
-    showError("");
+    liveCompare = null;
     var deleteAfter = $("mmDeleteAfterImport");
     if (deleteAfter && deleteAfter.checked && !window.confirm("Hapus script record penjualan dari MikroTik setelah import berhasil? Script lain tidak akan dihapus.")) {
       setRunning(false);
       return;
     }
+    setProgress(2, true, "Memulai sinkronisasi…");
     post("start", {delete_after_import: (deleteAfter && deleteAfter.checked) ? "1" : "0"}).then(function (data) {
       render(data);
-      setProgress(8, true);
       var run = data.run || null;
       if (!run) { setRunning(false); return; }
-      if (run.worker === "web" && run.mode === "full" && data.months && data.months.length) {
-        return scanMonths(data.months, run.id);
+      if (run.worker === "web" && run.mode === "full") {
+        return runWebSync(run.id, data.months || []);
       }
       pollUntilDone();
+    }).catch(function (err) {
+      setRunning(false);
+      showError(err.message);
+    });
+  }
+
+  function runWebSync(runId, fallbackMonths) {
+    setProgress(5, true, "Memindai script MikroTik…");
+    return post("scan_full", { run_id: runId }).then(function (data) {
+      render(data);
+      if (data.use_months) {
+        var months = (data.months && data.months.length) ? data.months : fallbackMonths;
+        if (months && months.length) {
+          return scanMonths(months, runId);
+        }
+      }
+      return importAll(runId);
     }).catch(function (err) {
       setRunning(false);
       showError(err.message);
@@ -260,7 +324,7 @@
       var month = months[index++];
       return post("scan_month", { run_id: runId, month: month }).then(function (data) {
         render(data);
-        setProgress(index / months.length * 60);
+        setProgress(5 + (index / months.length) * 55, false, "Memindai bulan " + month + " (" + index + "/" + months.length + ")…");
         return next();
       });
     }
@@ -272,24 +336,25 @@
       render(data);
       var pending = data.db && data.db.pending ? Number(data.db.pending) : 0;
       if (pending > 0) {
-        setProgress(60 + Math.min(35, 60 - pending));
         return importAll(runId);
       }
+      setProgress(96, false, "Memverifikasi data & rekonsiliasi…");
       return post("verify", { run_id: runId }).then(function (result) {
         render(result);
         setRunning(false);
-        setProgress(100);
-        setTimeout(function () { location.reload(); }, 700);
+        setProgress(100, false, "Sinkronisasi selesai · memuat ulang…");
+        setTimeout(reloadClean, 700);
       });
     });
   }
 
   function cancel() {
-    var run = null;
-    loadStatus().then(function (data) {
-      run = data.run;
-      if (!run) { setRunning(false); return; }
-      return post("cancel", { run_id: run.id });
+    var run = lastRun;
+    var p = run ? Promise.resolve({ run: run }) : loadStatus();
+    p.then(function (data) {
+      var r = data.run;
+      if (!r) { setRunning(false); return; }
+      return post("cancel", { run_id: r.id });
     }).then(function () {
       setRunning(false);
       pollUntilDone();
@@ -300,12 +365,12 @@
   }
 
   function probe() {
-    showError("");
+    var info = $("mmSyncInfo");
+    if (info) { info.innerHTML = "<span class='mm-muted'>Menguji koneksi ke MikroTik…</span>"; }
     post("probe", {}).then(function (data) {
-      var info = $("mmSyncInfo");
       if (info) {
         info.innerHTML = data.ok
-          ? "Koneksi MikroTik OK. Script: <b>" + fmt(data.scripts) + "</b>"
+          ? "Koneksi MikroTik OK. Total script di router: <b>" + fmt(data.scripts) + "</b>"
           : "<b class='text-red'>Koneksi gagal: " + esc(data.error || "") + "</b>";
       }
     }).catch(function (err) { showError(err.message); });
@@ -355,7 +420,15 @@
     if (cancelBtn) { cancelBtn.addEventListener("click", cancel); }
     if (probeBtn) { probeBtn.addEventListener("click", probe); }
     if (session) {
-      loadStatus().catch(function () { /* ignore initial failure */ });
+      loadStatus().then(function (data) {
+        var run = data && data.run;
+        if (run && ["queued", "starting", "scanning", "importing", "verifying"].indexOf(String(run.status)) !== -1) {
+          setRunning(true);
+          if (run.worker !== "web") {
+            pollUntilDone();
+          }
+        }
+      }).catch(function () { /* ignore initial failure */ });
       loadCachedLiveCompare();
     }
   });
