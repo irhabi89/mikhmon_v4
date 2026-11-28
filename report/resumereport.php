@@ -30,7 +30,6 @@ $session = isset($_GET['session']) ? $_GET['session'] : '';
   require_once(__DIR__ . '/../include/config.php');
   require_once(__DIR__ . '/../include/readcfg.php');
   require_once(__DIR__ . '/../include/bootstrap.php');
-  mikhmon_require_schema();
 
 $idbl = isset($_GET['idbl']) ? $_GET['idbl'] : '';
 $thisM = substr($idbl,0,3);
@@ -40,19 +39,25 @@ if ($monthKey === null) {
   $monthKey = date('Y-m');
 }
 
-$resume_sales = new \Mikhmon\Storage\SalesRepository(mikhmon_database());
-$daily_rows = $resume_sales->daily($session, $monthKey);
 $resume_daily_map = array();
 $resume_total_count = 0;
 $resume_total_sum = 0.0;
-foreach ($daily_rows as $daily_row) {
-  $date_key = (string)$daily_row['date_key'];
-  $value = $daily_row['count'] . '/' . $daily_row['sum'];
-  $resume_daily_map[$date_key] = $value;
-  $legacy_date = strtolower(date('M', strtotime($date_key))) . '/' . date('d', strtotime($date_key)) . '/' . date('Y', strtotime($date_key));
-  $resume_daily_map[$legacy_date] = $value;
-  $resume_total_count += (int)$daily_row['count'];
-  $resume_total_sum += (float)$daily_row['sum'];
+$resume_db_error = '';
+try {
+  mikhmon_require_schema();
+  $resume_sales = new \Mikhmon\Storage\SalesRepository(mikhmon_database());
+  $daily_rows = $resume_sales->daily($session, $monthKey);
+  foreach ($daily_rows as $daily_row) {
+    $date_key = (string)$daily_row['date_key'];
+    $value = $daily_row['count'] . '/' . $daily_row['sum'];
+    $resume_daily_map[$date_key] = $value;
+    $legacy_date = strtolower(date('M', strtotime($date_key))) . '/' . date('d', strtotime($date_key)) . '/' . date('Y', strtotime($date_key));
+    $resume_daily_map[$legacy_date] = $value;
+    $resume_total_count += (int)$daily_row['count'];
+    $resume_total_sum += (float)$daily_row['sum'];
+  }
+} catch (Throwable $e) {
+  $resume_db_error = $e->getMessage();
 }
 $resume_daily_data = array(
   'total_count' => $resume_total_count,

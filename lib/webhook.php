@@ -42,6 +42,10 @@ if (!function_exists('mikhmon_webhook_url')) {
 if (!function_exists('mikhmon_webhook_token')) {
     function mikhmon_webhook_token(string $session, bool $create = false): string
     {
+        if (!function_exists('mikhmon_session_get')) {
+            require_once __DIR__ . '/mikhmon_db.php';
+            require_once __DIR__ . '/sessions_store.php';
+        }
         $row = function_exists('mikhmon_session_get') ? mikhmon_session_get($session) : null;
         $token = is_array($row) && isset($row['webhook_token']) ? trim((string)$row['webhook_token']) : '';
         if ($token === '' && $create && function_exists('mikhmon_session_upsert')) {
@@ -70,9 +74,10 @@ if (!function_exists('mikhmon_webhook_snippet')) {
         $quote = static function ($value) {
             return str_replace(array('\\', '"', '$'), array('\\\\', '\\"', '\\$'), (string)$value);
         };
+        $tls = stripos($url, 'https://') === 0 ? ' check-certificate=no' : '';
         return ':local mmwhurl "' . $quote($url) . '"; '
             . ':local mmwhtoken "' . $quote($token) . '"; '
-            . ':do { /tool fetch url=$mmwhurl http-method=post http-header-field="X-Mikhmon-Token: $mmwhtoken" http-data=$sname keep-result=no; } '
+            . ':do { /tool fetch url=$mmwhurl http-method=post http-header-field="X-Mikhmon-Token: $mmwhtoken" http-data=$sname' . $tls . ' keep-result=no; } '
             . 'on-error={ :log warning "mikhmon webhook gagal; record tetap ditulis ke script" }; ';
     }
 }

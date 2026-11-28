@@ -37,7 +37,7 @@ function mikhmon_v3_onlogin_script($expmode, $price, $validity, $sprice, $getloc
 :local comment [ /ip hotspot user get [ /ip hotspot user find where name="$user" ] comment ];
 :local ucode [:pick $comment 0 2];
 :if ($ucode = "vc" or $ucode = "up" or $comment = "") do={
-  /sys sch add name="$user" disable=no start-date=$dt interval="{{validity}}";
+  /sys sch add name="$user" disable=no start-date=$date interval="{{validity}}";
   :delay 2s;
   :local exp [ /sys sch get [ /sys sch find where name="$user" ] next-run ];
   :local expLegacy;
@@ -164,22 +164,52 @@ if (!function_exists('mikhmon_v3_compact_onlogin')) {
      * Expiry is installed as a per-user RouterOS scheduler instead of the
      * long inline next-run/comment logic used by the ROS7 profile script.
      */
-    function mikhmon_v3_compact_onlogin($price, $validity, $profile, string $webhookPart, string $lock = '', string $mode = ''): string
-    {
+    function mikhmon_v3_compact_onlogin(
+        $price,
+        $validity,
+        $profile,
+        string $webhookPart,
+        string $lock = '',
+        string $mode = '',
+        string $expmode = 'remc',
+        string $sprice = '',
+        string $getlock = 'Disable'
+    ): string {
+        $put = ':put (",' . $expmode . ',' . $price . ',' . $validity . ',' . $sprice . ',,' . $getlock . ',"); ';
+        if ($expmode === '0') {
+            return ':put (",,' . $price . ',,,noexp,' . $getlock . ',")' . $lock;
+        }
+
         $expiry = '';
         if ($mode !== '') {
             $action = $mode === 'remove'
-                ? '("/ip hotspot user remove [find name=" . $user . "]; /ip hotspot active remove [find user=" . $user . "]")'
-                : '("/ip hotspot user set [find name=" . $user . "] limit-uptime=1s")';
+                ? '("/ip hotspot user remove [find name=" . $user . "]; /ip hotspot active remove [find user=" . $user . "]; /system scheduler remove [find name=" . $user . "]")'
+                : '("/ip hotspot user set [find name=" . $user . "] limit-uptime=1s; /system scheduler remove [find name=" . $user . "]")';
             $expiry = ' :if ([:len [/system scheduler find where name=$user]] > 0) do={/system scheduler remove [find where name=$user]}; '
                 . ':local ev ' . $action . '; '
                 . '/system scheduler add name=$user start-date=$dt interval="' . $validity . '" on-event=$ev comment="Mikhmon expiry"; ';
         }
-        return '; :local sv "$server"; '
-            . ':if ([:len $sv] = 0) do={:local h [/ip hotspot find where interface=$interface]; :if ([:len $h] > 0) do={:set sv [/ip hotspot get $h name]}}; '
-            . ':local dt [/system clock get date]; :local tm [/system clock get time]; '
-            . ':local sname "$dt-|-$tm-|-$user-|-' . $price . '-|-$address-|-$mac-|-' . $validity . '-|-' . $profile . '-|-$comment|#MMSRV1#|$sv"; '
-            . '/system script add name=$sname source="compact" comment=mikhmon; '
-            . $expiry . $webhookPart . $lock;
+
+        $shouldRecord = ($expmode === 'remc' || $expmode === 'ntfc');
+        $recordAndHook = '';
+        if ($shouldRecord) {
+            $recordAndHook = ':local sv "$server"; '
+                . ':if ([:len $sv] = 0) do={:local h [/ip hotspot find where interface=$interface]; :if ([:len $h] > 0) do={:set sv [/ip hotspot get $h name]}}; '
+                . ':local tm [/system clock get time]; '
+                . ':local sname "$dt-|-$tm-|-$user-|-' . $price . '-|-$address-|-$mac-|-' . $validity . '-|-' . $profile . '-|-$comment|#MMSRV1#|$sv"; '
+                . '/system script add name=$sname source="compact" comment=mikhmon; '
+                . $webhookPart;
+        }
+
+        return $put . '{:local c [/ip hotspot user get [find where name=$user] comment]; '
+            . ':local uc [:pic $c 0 2]; '
+            . ':if ($uc = "vc" or $uc = "up" or $c = "") do={'
+            . ':local dt [/system clock get date]; '
+            . ':local tm2 [/system clock get time]; '
+            . $recordAndHook
+            . '/ip hotspot user set comment="$dt $tm2" [find where name=$user]; '
+            . $expiry
+            . $lock
+            . '}}';
     }
 }

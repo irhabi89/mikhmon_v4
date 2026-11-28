@@ -32,7 +32,10 @@ final class Database
         $this->pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
         $this->pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
         $this->pdo->exec('PRAGMA busy_timeout=10000');
-        $this->pdo->exec('PRAGMA journal_mode=WAL');
+        $mode = strtolower((string)$this->pdo->query('PRAGMA journal_mode')->fetchColumn());
+        if ($mode !== 'wal') {
+            $this->pdo->exec('PRAGMA journal_mode=WAL');
+        }
         $this->pdo->exec('PRAGMA synchronous=NORMAL');
         $this->pdo->exec('PRAGMA temp_store=MEMORY');
         $this->pdo->exec('PRAGMA cache_size=-20000');
@@ -57,7 +60,9 @@ final class Database
     {
         $st = $this->statement($sql);
         $st->execute($params);
-        return $st->fetchAll();
+        $rows = $st->fetchAll();
+        $st->closeCursor();
+        return $rows;
     }
 
     /**
@@ -69,6 +74,7 @@ final class Database
         $st = $this->statement($sql);
         $st->execute($params);
         $row = $st->fetch();
+        $st->closeCursor();
         return $row === false ? null : $row;
     }
 
@@ -80,7 +86,9 @@ final class Database
     {
         $st = $this->statement($sql);
         $st->execute($params);
-        return $st->fetchColumn();
+        $val = $st->fetchColumn();
+        $st->closeCursor();
+        return $val;
     }
 
     /**
@@ -90,7 +98,9 @@ final class Database
     {
         $st = $this->statement($sql);
         $st->execute($params);
-        return $st->rowCount();
+        $count = $st->rowCount();
+        $st->closeCursor();
+        return $count;
     }
 
     private function statement(string $sql): \PDOStatement

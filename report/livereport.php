@@ -12,13 +12,12 @@ if (!isset($_SESSION['mikhmon'])) {
 
 require_once __DIR__ . '/../include/bootstrap.php';
 require_once __DIR__ . '/../include/ui.php';
-mikhmon_require_schema();
+require_once __DIR__ . '/../include/report_fallback.php';
 include __DIR__ . '/../include/lang.php';
 include __DIR__ . '/../lang/' . $langid . '.php';
 
-$db = mikhmon_database();
 $session = isset($_GET['session']) ? (string)$_GET['session'] : '';
-$row = $session !== '' ? $db->fetchOne('SELECT * FROM mikhmon_sessions WHERE name = ?', array($session)) : null;
+$row = mikhmon_safe_session_row($session);
 if ($row === null) {
     exit('Router session tidak ditemukan.');
 }
@@ -26,26 +25,35 @@ $currency = isset($row['currency']) && $row['currency'] !== '' ? (string)$row['c
 $decimals = in_array(strtoupper($currency), array('RP', 'IDR', 'RP.'), true) ? 0 : 2;
 $livereport = isset($row['live_report']) ? (string)$row['live_report'] : 'enable';
 
+$dbError = '';
+$empty = true;
 if ($livereport === 'disable') {
     $logh = '457px';
     $lreport = "style='display:none;'";
 } else {
     $logh = '350px';
     $lreport = "style='display:block;'";
-    $sales = new \Mikhmon\Storage\SalesRepository($db);
-    $stats = $sales->stats($session);
+    try {
+        mikhmon_require_schema();
+        $db = mikhmon_database();
+        $sales = new \Mikhmon\Storage\SalesRepository($db);
+        $stats = $sales->stats($session);
 
-    $_SESSION[$session . 'dincome'] = number_format($stats['today_sum'], $decimals, ',', '.');
-    $_SESSION[$session . 'mincome'] = number_format($stats['month_sum'], $decimals, ',', '.');
-    $_SESSION[$session . 'totalBl'] = $stats['month_count'];
-    $_SESSION[$session . 'totalHr'] = $stats['today_count'];
-    $_SESSION[$session . 'idhr'] = date('Y-m-d');
+        $_SESSION[$session . 'dincome'] = number_format($stats['today_sum'], $decimals, ',', '.');
+        $_SESSION[$session . 'mincome'] = number_format($stats['month_sum'], $decimals, ',', '.');
+        $_SESSION[$session . 'totalBl'] = $stats['month_count'];
+        $_SESSION[$session . 'totalHr'] = $stats['today_count'];
+        $_SESSION[$session . 'idhr'] = date('Y-m-d');
 
-    $totalHr = number_format((int)$stats['today_count'], 0, ',', '.');
-    $totalBl = number_format((int)$stats['month_count'], 0, ',', '.');
-    $dincome = $_SESSION[$session . 'dincome'];
-    $mincome = $_SESSION[$session . 'mincome'];
-    $empty = $stats['total_count'] === 0;
+        $totalHr = number_format((int)$stats['today_count'], 0, ',', '.');
+        $totalBl = number_format((int)$stats['month_count'], 0, ',', '.');
+        $dincome = $_SESSION[$session . 'dincome'];
+        $mincome = $_SESSION[$session . 'mincome'];
+        $empty = $stats['total_count'] === 0;
+    } catch (Throwable $e) {
+        $dbError = $e->getMessage();
+        $empty = true;
+    }
     session_write_close();
 }
 ?>

@@ -75,9 +75,9 @@ if (!isset($_SESSION["mikhmon"])) {
     $mmWebhookPart = mikhmon_webhook_snippet((string)$session);
     $isRos6 = mikhmon_is_ros6($API);
     if ($isRos6) {
-      $onlogin = mikhmon_v3_compact_onlogin($price, $validity, $name, $mmWebhookPart, $lock, $mode);
+      $onlogin = mikhmon_v3_compact_onlogin($price, $validity, $name, $mmWebhookPart, $lock, $mode, $expmode, $sprice, $getlock);
     } else {
-      $record = '; :local mac $"mac-address"; :local time [/system clock get time ]; :local mmsrv ""; :foreach mma in=[/ip/hotspot/active/find where user=$user] do={ :set mmsrv [ /ip/hotspot/active/get $mma server ] }; :if ($mmsrv = "") do={ :local mmu [/ip/hotspot/user/find where name=$user]; :if ([:len $mmu] > 0) do={ :set mmsrv [/ip/hotspot/user/get $mmu server] } }; :if ($mmsrv = "") do={ :local mmh [/ip/hotspot/find where interface=$interface]; :if ([:len $mmh] > 0) do={ :set mmsrv [/ip/hotspot/get $mmh name] } }; :local sname "$legacy-|-$time-|-$user-|-'.$price.'-|-$address-|-$mac-|-' . $validity . '-|-'.$name.'-|-$comment|#MMSRV1#|$mmsrv"; /system script add name=$sname owner="$monthname$year" source=$legacy comment=mikhmon; /system script set [find name=$sname] owner="$monthname$year"; ' . $mmWebhookPart;
+      $record = '; :local mac $"mac-address"; :local time [/system clock get time ]; :local mmsrv ""; :foreach mma in=[/ip/hotspot/active/find where user=$user] do={ :set mmsrv [ /ip/hotspot/active/get $mma server ] }; :if ($mmsrv = "") do={ :local mmu [/ip/hotspot/user/find where name=$user]; :if ([:len $mmu] > 0) do={ :set mmsrv [/ip/hotspot/user/get $mmu server] } }; :if ($mmsrv = "") do={ :local mmh [/ip/hotspot/find where interface=$interface]; :if ([:len $mmh] > 0) do={ :set mmsrv [/ip/hotspot/get $mmh name] } }; :local sname "$legacy-|-$time-|-$user-|-'.$price.'-|-$address-|-$mac-|-' . $validity . '-|-'.$name.'-|-$comment|#MMSRV1#|$mmsrv"; /system script add name=$sname owner="$monthname$year" source=$legacy comment=mikhmon; ' . $mmWebhookPart;
       $onlogin = mikhmon_v3_onlogin_script($expmode, $price, $validity, $sprice, $getlock, $mode, $record, $lock);
     }
     $bgservice = mikhmon_v3_bgservice_script($name, $mode);

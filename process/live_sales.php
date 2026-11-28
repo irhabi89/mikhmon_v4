@@ -20,10 +20,10 @@ if (!isset($_SESSION['mikhmon'])) {
 }
 require_once(__DIR__ . '/../include/bootstrap.php');
 require_once(__DIR__ . '/../lib/router.php');
-mikhmon_require_schema();
+require_once(__DIR__ . '/../include/report_fallback.php');
 
 $session = isset($_GET['session']) ? (string)$_GET['session'] : '';
-if ($session === '') {
+if ($session === '' || preg_match('/^[A-Za-z0-9_.-]+$/', $session) !== 1) {
     echo json_encode(array('type' => 'error', 'error' => 'session required')) . "\n";
     flush();
     exit;
@@ -63,37 +63,56 @@ $count = 0;
 $started = microtime(true);
 $compareTotal = 0;
 $compareMatched = 0;
+$compareInvalid = 0;
 $compareSeen = array();
 $dbTotal = 0;
 $dbCheck = null;
-if ($compareMode) {
-    $db = mikhmon_database();
-    $dbTotal = (int)$db->value('SELECT COUNT(*) FROM sales_records WHERE session = ?', array($session));
-    $dbCheck = $db->pdo()->prepare('SELECT 1 FROM sales_records WHERE session = ? AND name = ? LIMIT 1');
-}
+$dbAvailable = false;
+$dbError = '';
 
 try {
-    $client = (new \Mikhmon\Router\RouterClientFactory(mikhmon_database()))->forSession($session);
+    mikhmon_require_schema();
+    $db = mikhmon_database();
+    $dbAvailable = true;
+    if ($compareMode) {
+        $dbTotal = (int)$db->value('SELECT COUNT(*) FROM sales_records WHERE session = ?', array($session));
+        $dbCheck = $db->pdo()->prepare('SELECT 1 FROM sales_records WHERE session = ? AND name = ? LIMIT 1');
+    }
+} catch (Throwable $e) {
+    $dbAvailable = false;
+    $dbError = $e->getMessage();
+}
+
+session_write_close();
+
+try {
+    $client = mikhmon_safe_router_client($session);
     $client->connect();
     if (!$summaryMode) {
-        echo json_encode(array('type' => 'meta', 'source' => 'router', 'session' => $session)) . "\n";
+        echo json_encode(array('type' => 'meta', 'source' => 'router', 'session' => $session, 'db_error' => $dbError)) . "\n";
         flush();
     }
-    $result = $client->stream('/system/script/print', array('.proplist' => '.id,name,comment'), function (array $row) use ($filter, $summaryMode, $compareMode, &$count, $today, $month, &$summary, &$compareTotal, &$compareMatched, &$compareSeen, $dbCheck, $session) {
+    $result = $client->stream('/system/script/print', array('.proplist' => '.id,name,comment'), function (array $row) use ($filter, $summaryMode, $compareMode, $dbAvailable, &$count, $today, $month, &$summary, &$compareTotal, &$compareMatched, &$compareInvalid, &$compareSeen, $dbCheck, $session) {
         $name = isset($row['name']) ? (string)$row['name'] : '';
         $comment = isset($row['comment']) ? (string)$row['comment'] : '';
         if ($name === '' || !\Mikhmon\Support\RecordParser::isSalesRecord($name, $comment)) { return true; }
+        $parsed = \Mikhmon\Support\RecordParser::parse($name);
         if ($compareMode && !isset($compareSeen[$name])) {
             $compareSeen[$name] = true;
-            $compareTotal++;
-            if ($dbCheck !== null) {
-                $dbCheck->execute(array($session, $name));
-                if ($dbCheck->fetchColumn() !== false) {
-                    $compareMatched++;
+            if ($parsed === null) {
+                $compareInvalid++;
+            } else {
+                $compareTotal++;
+                if ($dbAvailable && $dbCheck !== null) {
+                    $dbCheck->execute(array($session, $name));
+                    $found = $dbCheck->fetchColumn() !== false;
+                    $dbCheck->closeCursor();
+                    if ($found) {
+                        $compareMatched++;
+                    }
                 }
             }
         }
-        $parsed = \Mikhmon\Support\RecordParser::parse($name);
         if ($parsed === null || !mm_live_match($parsed, $filter)) { return true; }
         $count++;
         $price = (float)($parsed['price'] ?? 0);
@@ -122,44 +141,51 @@ try {
         return true;
     }, 120.0);
     $client->close();
+
+    $compare = null;
+    if ($compareMode && $dbAvailable) {
+        $compareMissing = max(0, $compareTotal - $compareMatched);
+        $compare = array(
+            'type' => 'compare',
+            'source' => 'live',
+            'router_total' => $compareTotal,
+            'db_total' => $dbTotal,
+            'matched' => $compareMatched,
+            'missing' => $compareMissing,
+            'invalid' => $compareInvalid,
+            'archive_extra' => max(0, $dbTotal - $compareMatched),
+            'synced_percent' => $compareTotal > 0 ? round($compareMatched / $compareTotal * 100, 1) : null,
+            'unsynced_percent' => $compareTotal > 0 ? round($compareMissing / $compareTotal * 100, 1) : null,
+            'verified' => false,
+            'complete' => (bool)$result->ok,
+            'checked_at' => date('Y-m-d H:i:s'),
+        );
+        if ($result->ok) {
+            mikhmon_write_live_compare_cache($session, $compare);
+        }
+    }
+
     if ($summaryMode) {
         if ($streamSummary) {
-            echo json_encode(array('type' => 'summary', 'ok' => true, 'source' => 'router', 'count' => $count, 'summary' => $summary)) . "\n";
-            echo json_encode(array('type' => 'done', 'rows' => $count, 'complete' => $result->ok, 'error' => $result->error)) . "\n";
+            if ($compare !== null) {
+                echo json_encode($compare, JSON_UNESCAPED_SLASHES) . "\n";
+            }
+            echo json_encode(array('type' => 'summary', 'ok' => true, 'source' => 'router', 'count' => $count, 'summary' => $summary, 'compare' => $compare, 'db_error' => $dbError), JSON_UNESCAPED_SLASHES) . "\n";
+            echo json_encode(array('type' => 'done', 'rows' => $count, 'complete' => $result->ok, 'error' => $result->error), JSON_UNESCAPED_SLASHES) . "\n";
         } else {
-            echo json_encode(array('ok' => true, 'source' => 'router', 'count' => $count, 'summary' => $summary)) . "\n";
+            echo json_encode(array('ok' => true, 'source' => 'router', 'count' => $count, 'summary' => $summary, 'compare' => $compare, 'db_error' => $dbError), JSON_UNESCAPED_SLASHES) . "\n";
         }
     } else {
-        if ($compareMode) {
-            $compareMissing = max(0, $compareTotal - $compareMatched);
-            $compare = array(
-                'type' => 'compare',
-                'source' => 'live',
-                'router_total' => $compareTotal,
-                'db_total' => $dbTotal,
-                'matched' => $compareMatched,
-                'missing' => $compareMissing,
-                'archive_extra' => max(0, $dbTotal - $compareMatched),
-                'synced_percent' => $compareTotal > 0 ? round($compareMatched / $compareTotal * 100, 1) : null,
-                'unsynced_percent' => $compareTotal > 0 ? round($compareMissing / $compareTotal * 100, 1) : null,
-                'verified' => false,
-                'complete' => (bool)$result->ok,
-                'checked_at' => date('Y-m-d H:i:s'),
-            );
+        if ($compare !== null) {
             echo json_encode($compare, JSON_UNESCAPED_SLASHES) . "\n";
-            if ($result->ok) {
-                $cacheDir = dirname(__DIR__) . '/data/cache';
-                if (!is_dir($cacheDir)) { @mkdir($cacheDir, 0775, true); }
-                @file_put_contents($cacheDir . '/live-compare-' . hash('sha256', $session) . '.json', json_encode($compare, JSON_UNESCAPED_SLASHES));
-            }
         }
-        echo json_encode(array('type' => 'done', 'rows' => $count, 'complete' => $result->ok, 'error' => $result->error)) . "\n";
+        echo json_encode(array('type' => 'done', 'rows' => $count, 'complete' => $result->ok, 'error' => $result->error, 'db_error' => $dbError), JSON_UNESCAPED_SLASHES) . "\n";
     }
 } catch (Throwable $e) {
     if ($summaryMode) {
-        echo json_encode(array('ok' => false, 'error' => $e->getMessage())) . "\n";
+        echo json_encode(array('ok' => false, 'error' => $e->getMessage(), 'db_error' => $dbError), JSON_UNESCAPED_SLASHES) . "\n";
     } else {
-        echo json_encode(array('type' => 'error', 'error' => $e->getMessage())) . "\n";
+        echo json_encode(array('type' => 'error', 'error' => $e->getMessage(), 'db_error' => $dbError), JSON_UNESCAPED_SLASHES) . "\n";
     }
 }
 flush();

@@ -86,6 +86,15 @@
       badge.className = "mm-badge " + (missing === 0 ? "bg-green text-white" : "bg-orange text-white");
       badge.innerHTML = '<i class="fa fa-refresh"></i> ' + (missing === 0 ? "Data live sudah cocok" : "Belum tersinkron " + (c.unsynced_percent !== null ? pct(c.unsynced_percent) : "") + " (" + fmt(missing) + ")");
     }
+    var pageWrap = $("mmPageSourceWrap");
+    if (pageWrap && !running) {
+      var pageMissing = Number(c.missing || 0);
+      var cls = pageMissing === 0 ? "bg-green text-white" : "bg-orange text-white";
+      var label = pageMissing === 0
+        ? '<i class="fa fa-check"></i> 100% Sinkron' + (c.archive_extra ? ' · ' + fmt(c.archive_extra) + ' arsip DB' : '')
+        : '<i class="fa fa-refresh"></i> Belum tersinkron ' + fmt(pageMissing) + (c.unsynced_percent !== null ? ' (' + pct(c.unsynced_percent) + ')' : '');
+      pageWrap.innerHTML = '<span class="mm-badge ' + cls + '">' + label + '</span>';
+    }
   }
 
   function render(data) {
@@ -205,6 +214,7 @@
 
   function setRunning(value) {
     running = value;
+    window.MM_SYNC_BUSY = !!value;
     var start = $("mmSyncStart");
     var cancel = $("mmSyncCancel");
     var importBtn = $("mmSyncImport");
@@ -315,6 +325,13 @@
 
   document.addEventListener("mm-open-sync-modal", function () {
     window.location.hash = "#mmSyncModal";
+  });
+
+  document.addEventListener("mm-start-sync", function () {
+    window.location.hash = "#mmSyncModal";
+    if (!running && !polling) {
+      start();
+    }
   });
 
   function loadCachedLiveCompare() {
