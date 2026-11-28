@@ -32,6 +32,7 @@
     var todayCount = 0, monthCount = 0, totalCount = 0;
     var todaySum = 0, monthSum = 0, totalSum = 0;
     var timer = 0;
+    var cacheKey = 'mm_live_income:' + (opts.session || '') + ':' + today;
     function showError(message) {
       var el = document.getElementById('mmDashLiveError');
       if (el) { el.textContent = message; el.style.display = ''; }
@@ -40,17 +41,29 @@
       var el = document.getElementById('mmDashLiveError');
       if (el) { el.style.display = 'none'; el.textContent = ''; }
     }
-    function render() {
-      timer = 0;
-      set('mmDashTodayValue', money(currency, decimals, todaySum));
-      set('mmDashTodayCount', todayCount.toLocaleString('id-ID'));
-      set('mmDashMonthValue', money(currency, decimals, monthSum));
-      set('mmDashMonthCount', monthCount.toLocaleString('id-ID'));
+    function renderValues(tc, ts, mc, ms) {
+      set('mmDashTodayValue', money(currency, decimals, ts));
+      set('mmDashTodayCount', tc.toLocaleString('id-ID'));
+      set('mmDashMonthValue', money(currency, decimals, ms));
+      set('mmDashMonthCount', mc.toLocaleString('id-ID'));
       var vals = document.getElementById('mmDashLiveValues');
       if (vals) { vals.style.display = ''; }
       hasRendered = true;
       clearError();
     }
+    function render() {
+      timer = 0;
+      renderValues(todayCount, todaySum, monthCount, monthSum);
+    }
+    try {
+      var rawIncome = sessionStorage.getItem(cacheKey);
+      if (rawIncome) {
+        var c = JSON.parse(rawIncome);
+        if (c && typeof c.todayCount === 'number') {
+          renderValues(c.todayCount, c.todaySum || 0, c.monthCount || 0, c.monthSum || 0);
+        }
+      }
+    } catch (e) {}
     function schedule() {
       if (timer) { return; }
       timer = window.setTimeout(render, 120);
@@ -79,7 +92,11 @@
                 if (String(event.data.date_key || '').slice(0, 7) === month) { monthCount++; monthSum += price; }
                 if (!hasRendered) { schedule(); }
               }
-              if (event.type === 'done') { inFlight = false; render(); }
+              if (event.type === 'done') {
+                inFlight = false;
+                try { sessionStorage.setItem(cacheKey, JSON.stringify({ts: Date.now(), todayCount: todayCount, todaySum: todaySum, monthCount: monthCount, monthSum: monthSum})); } catch (e) {}
+                render();
+              }
               if (event.type === 'error') { inFlight = false; showError('Data live gagal dimuat: ' + String(event.error || '')); }
             });
             return pump();

@@ -111,3 +111,55 @@ if (!function_exists('mikhmon_clear_live_compare_cache')) {
         }
     }
 }
+
+if (!function_exists('mikhmon_live_cache_read')) {
+    /**
+     * @return array<string,mixed>|null
+     */
+    function mikhmon_live_cache_read(string $bucket, string $key, int $ttlSeconds = 15): ?array
+    {
+        if ($ttlSeconds <= 0) {
+            return null;
+        }
+        $safeBucket = preg_replace('/[^A-Za-z0-9_-]+/', '-', $bucket);
+        $file = dirname(__DIR__) . '/data/cache/' . $safeBucket . '-' . hash('sha256', $key) . '.json';
+        if (!is_file($file)) {
+            return null;
+        }
+        $mtime = @filemtime($file);
+        if ($mtime === false || (time() - $mtime) > $ttlSeconds) {
+            return null;
+        }
+        $raw = @file_get_contents($file);
+        if (!is_string($raw) || $raw === '') {
+            return null;
+        }
+        $decoded = json_decode($raw, true);
+        return is_array($decoded) ? $decoded : null;
+    }
+}
+
+if (!function_exists('mikhmon_live_cache_write')) {
+    /**
+     * @param array<string,mixed> $payload
+     */
+    function mikhmon_live_cache_write(string $bucket, string $key, array $payload): void
+    {
+        $cacheDir = dirname(__DIR__) . '/data/cache';
+        if (!is_dir($cacheDir)) {
+            @mkdir($cacheDir, 0775, true);
+        }
+        $safeBucket = preg_replace('/[^A-Za-z0-9_-]+/', '-', $bucket);
+        $file = $cacheDir . '/' . $safeBucket . '-' . hash('sha256', $key) . '.json';
+        $tmp = $file . '.tmp.' . getmypid();
+        $json = json_encode($payload, JSON_UNESCAPED_SLASHES);
+        if (!is_string($json)) {
+            return;
+        }
+        if (@file_put_contents($tmp, $json) !== false) {
+            @rename($tmp, $file);
+        } else {
+            @unlink($tmp);
+        }
+    }
+}

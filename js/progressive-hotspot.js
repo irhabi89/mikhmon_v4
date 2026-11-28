@@ -55,12 +55,28 @@
       });
     }
     function schedule() { if (timer) { return; } timer = setTimeout(function () { timer = 0; render(); }, 120); }
-    body.innerHTML = '<tr><td colspan="' + (opts.colspan || 8) + '" class="mm-muted"><i class="fa fa-circle-o-notch fa-spin"></i> Memuat data…</td></tr>';
+    var cacheKey = 'mm_live_hotspot:' + (opts.session || '') + ':' + type + ':' + location.search;
+    var hadCached = false;
+    try {
+      var rawCache = sessionStorage.getItem(cacheKey);
+      if (rawCache) {
+        var parsedCache = JSON.parse(rawCache);
+        if (parsedCache && Array.isArray(parsedCache.rows)) {
+          rows = parsedCache.rows;
+          hadCached = true;
+          render();
+        }
+      }
+    } catch (e) {}
+    if (!hadCached) {
+      body.innerHTML = '<tr><td colspan="' + (opts.colspan || 8) + '" class="mm-muted"><i class="fa fa-circle-o-notch fa-spin"></i> Memuat data…</td></tr>';
+    }
     var url = './process/live_hotspot.php?' + location.search.replace(/^\?/, '') + '&type=' + encodeURIComponent(type);
+    var nextRows = [];
     fetch(url, {credentials: 'same-origin', headers: {'Accept': 'application/x-ndjson'}})
       .then(function (res) { if (!res.ok || !res.body) { throw new Error('HTTP ' + res.status); } var reader = res.body.getReader(), dec = new TextDecoder(), buf = '';
-        function pump() { return reader.read().then(function (part) { if (part.done) { return; } buf += dec.decode(part.value, {stream: true}); var lines = buf.split('\n'); buf = lines.pop(); lines.forEach(function (line) { if (!line.trim()) { return; } var e; try { e = JSON.parse(line); } catch (x) { return; } if (e.type === 'row') { rows.push(e.data); schedule(); } if (e.type === 'done') { render(); } if (e.type === 'error') { body.innerHTML = '<tr><td colspan="' + (opts.colspan || 8) + '" class="text-red">Gagal memuat: ' + String(e.error) + '</td></tr>'; } }); return pump(); }); } return pump(); })
-      .catch(function (err) { body.innerHTML = '<tr><td colspan="' + (opts.colspan || 8) + '" class="text-red">Gagal memuat: ' + String(err.message) + '</td></tr>'; });
+        function pump() { return reader.read().then(function (part) { if (part.done) { return; } buf += dec.decode(part.value, {stream: true}); var lines = buf.split('\n'); buf = lines.pop(); lines.forEach(function (line) { if (!line.trim()) { return; } var e; try { e = JSON.parse(line); } catch (x) { return; } if (e.type === 'row') { nextRows.push(e.data); if (!hadCached) { rows.push(e.data); schedule(); } } if (e.type === 'done') { rows = nextRows; hadCached = true; try { sessionStorage.setItem(cacheKey, JSON.stringify({ts: Date.now(), rows: rows})); } catch (err) {} render(); } if (e.type === 'error' && !hadCached) { body.innerHTML = '<tr><td colspan="' + (opts.colspan || 8) + '" class="text-red">Gagal memuat: ' + String(e.error) + '</td></tr>'; } }); return pump(); }); } return pump(); })
+      .catch(function (err) { if (!hadCached) { body.innerHTML = '<tr><td colspan="' + (opts.colspan || 8) + '" class="text-red">Gagal memuat: ' + String(err.message) + '</td></tr>'; } });
   }
   window.MMProgressiveHotspot = {start: start};
 })();

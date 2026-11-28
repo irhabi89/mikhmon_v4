@@ -322,18 +322,94 @@ for ($i = 0; $i < $TotalReg; $i++) {
   var countEl = document.getElementById('cuser');
   var loader = document.getElementById('loader');
   if (!body) { return; }
+  var config = <?= json_encode(array('session' => (string)$session, 'currency' => (string)$currency), JSON_UNESCAPED_SLASHES); ?>;
+  var cacheKey = 'mm_live_users_all:' + config.session;
   var rows = [];
   var page = 1;
   var perPage = 50;
   var pending = 0;
   var comments = {};
-  body.innerHTML = '<tr id="mmUsersLoading"><td colspan="10" class="mm-muted"><i class="fa fa-circle-o-notch fa-spin"></i> Memuat data pengguna dari MikroTik...</td></tr>';
+  var hadCached = false;
+  var activeFetchController = null;
+
+  function readUsersCache() {
+    try {
+      var raw = sessionStorage.getItem(cacheKey);
+      if (!raw) { return null; }
+      var parsed = JSON.parse(raw);
+      return parsed && Array.isArray(parsed.rows) ? parsed : null;
+    } catch (e) { return null; }
+  }
+  function writeUsersCache(allRows, profilesData) {
+    try { sessionStorage.setItem(cacheKey, JSON.stringify({ts: Date.now(), rows: allRows, profiles: profilesData || {}})); } catch (e) {}
+  }
+  function filterCachedRows(allRows, params) {
+    var prof = params.get('profile') || '';
+    var comm = params.get('comment') || '';
+    var exp = params.get('exp') || '';
+    return allRows.filter(function (r) {
+      if (prof && prof !== 'all' && String(r.profile || '') !== prof) { return false; }
+      if (comm && String(r.comment || '') !== comm) { return false; }
+      if (exp && String(r.limit_uptime || '').indexOf('expired') === -1) { return false; }
+      return true;
+    });
+  }
+  function updateCommentSelect(commentMap) {
+    var cs = document.getElementById('comment');
+    if (!cs) { return; }
+    var currentVal = new URLSearchParams(location.search).get('comment') || '';
+    while (cs.options.length > 1) { cs.remove(1); }
+    Object.keys(commentMap).forEach(function (k) {
+      var parts = k.split('\u0000');
+      var o = document.createElement('option');
+      o.value = parts[0];
+      o.textContent = parts[0] + ' ' + parts[1] + ' [' + commentMap[k] + ']';
+      if (currentVal && currentVal === parts[0]) { o.selected = true; }
+      cs.appendChild(o);
+    });
+  }
+  function updateProfileSelect(profData) {
+    var sel = document.querySelector('select[title="Filter by Profile"]');
+    if (!sel || !profData) { return; }
+    Object.keys(profData).forEach(function (name) {
+      var opt = sel.querySelector('option[data-profile-name="' + String(name).replace(/"/g, '\\"') + '"]');
+      if (!opt) {
+        opt = document.createElement('option');
+        opt.value = './?hotspot=users&profile=' + encodeURIComponent(name) + '&session=' + encodeURIComponent(config.session);
+        opt.setAttribute('data-profile-name', name);
+        sel.appendChild(opt);
+      }
+      opt.textContent = name + '(' + Number(profData[name]).toLocaleString('id-ID') + ')';
+    });
+  }
+  function applyCachedUsers() {
+    var cached = readUsersCache();
+    if (!cached) { return false; }
+    var params = new URLSearchParams(location.search);
+    rows = filterCachedRows(cached.rows, params);
+    comments = {};
+    cached.rows.forEach(function (r) {
+      var c = String(r.comment || '');
+      if (c.indexOf('vc-') === 0 || c.indexOf('up-') === 0) {
+        var ck = c + '\u0000' + String(r.profile || '');
+        comments[ck] = (comments[ck] || 0) + 1;
+      }
+    });
+    updateProfileSelect(cached.profiles);
+    updateCommentSelect(comments);
+    page = 1;
+    hadCached = true;
+    renderPage();
+    return true;
+  }
+  if (!applyCachedUsers()) {
+    body.innerHTML = '<tr id="mmUsersLoading"><td colspan="10" class="mm-muted"><i class="fa fa-circle-o-notch fa-spin"></i> Memuat data pengguna dari MikroTik...</td></tr>';
+  }
   function textCell(value) { var td = document.createElement('td'); td.textContent = value == null ? '' : String(value); return td; }
   function addLink(td, href, icon, title, onclick) {
     var a = document.createElement('a'); a.href = href || '#'; a.title = title || ''; if (onclick) { a.setAttribute('onclick', onclick); }
     var i = document.createElement('i'); i.className = icon; a.appendChild(i); td.appendChild(a); return a;
   }
-  var config = <?= json_encode(array('session' => (string)$session, 'currency' => (string)$currency), JSON_UNESCAPED_SLASHES); ?>;
   function renderPage() {
     body.innerHTML = '';
     var start = (page - 1) * perPage;
@@ -372,10 +448,49 @@ for ($i = 0; $i < $TotalReg; $i++) {
     }
   }
   function schedule() { if (pending) { return; } pending = setTimeout(function () { pending = 0; renderPage(); }, 150); }
-  fetch('./process/live_users.php?' + location.search.replace(/^\?/, ''), {credentials: 'same-origin', headers: {'Accept': 'application/x-ndjson'}})
-    .then(function (res) { if (!res.ok || !res.body) { throw new Error('HTTP ' + res.status); } var reader = res.body.getReader(), decoder = new TextDecoder(), buf = '';
-      function pump() { return reader.read().then(function (part) { if (part.done) { return; } buf += decoder.decode(part.value, {stream: true}); var lines = buf.split('\n'); buf = lines.pop(); lines.forEach(function (line) { if (!line.trim()) { return; } var e; try { e = JSON.parse(line); } catch (x) { return; } if (e.type === 'row') { rows.push(e.data); var c = String(e.data.comment || ''); if (c.indexOf('vc-') === 0 || c.indexOf('up-') === 0) { var ck = c + '\u0000' + String(e.data.profile || ''); comments[ck] = (comments[ck] || 0) + 1; } schedule(); } if (e.type === 'profiles') { var sel = document.querySelector('select[title="Filter by Profile"]'); Object.keys(e.data || {}).forEach(function (name) { var opt = document.querySelector('option[data-profile-name="' + String(name).replace(/"/g, '\\"') + '"]'); if (!opt && sel) { opt = document.createElement('option'); opt.value = './?hotspot=users&profile=' + encodeURIComponent(name) + '&session=' + encodeURIComponent(config.session); opt.setAttribute('data-profile-name', name); sel.appendChild(opt); } if (opt) { opt.textContent = name + '(' + Number(e.data[name]).toLocaleString('id-ID') + ')'; } }); } if (e.type === 'done') { if (loader) { loader.style.display = 'none'; } if (e.rows === 0) { body.innerHTML = '<tr><td colspan="10" class="mm-muted">Tidak ada user.</td></tr>'; } var cs = document.getElementById('comment'); if (cs) { while (cs.options.length > 1) { cs.remove(1); } Object.keys(comments).forEach(function (k) { var parts = k.split('\u0000'); var o = document.createElement('option'); o.value = parts[0]; o.textContent = parts[0] + ' ' + parts[1] + ' [' + comments[k] + ']'; cs.appendChild(o); }); } renderPage(); } if (e.type === 'error') { body.innerHTML = '<tr><td colspan="10" class="text-red">Gagal memuat user: ' + String(e.error) + '</td></tr>'; } }); return pump(); }); } return pump(); })
-    .catch(function (err) { body.innerHTML = '<tr><td colspan="10" class="text-red">Gagal memuat user: ' + String(err.message) + '</td></tr>'; });
+  function fetchLiveUsers() {
+    if (activeFetchController) { try { activeFetchController.abort(); } catch (e) {} }
+    activeFetchController = new AbortController();
+    var nextRows = [];
+    var nextComments = {};
+    var nextProfiles = null;
+    var params = new URLSearchParams(location.search);
+    var isAll = (!params.get('profile') || params.get('profile') === 'all') && !params.get('comment') && !params.get('exp');
+    fetch('./process/live_users.php?' + location.search.replace(/^\?/, ''), {credentials: 'same-origin', signal: activeFetchController.signal, headers: {'Accept': 'application/x-ndjson'}})
+      .then(function (res) { if (!res.ok || !res.body) { throw new Error('HTTP ' + res.status); } var reader = res.body.getReader(), decoder = new TextDecoder(), buf = '';
+        function pump() { return reader.read().then(function (part) { if (part.done) { return; } buf += decoder.decode(part.value, {stream: true}); var lines = buf.split('\n'); buf = lines.pop(); lines.forEach(function (line) { if (!line.trim()) { return; } var e; try { e = JSON.parse(line); } catch (x) { return; } if (e.type === 'row') { nextRows.push(e.data); var c = String(e.data.comment || ''); if (c.indexOf('vc-') === 0 || c.indexOf('up-') === 0) { var ck = c + '\u0000' + String(e.data.profile || ''); nextComments[ck] = (nextComments[ck] || 0) + 1; } if (!hadCached) { rows.push(e.data); comments = nextComments; schedule(); } } if (e.type === 'profiles') { nextProfiles = e.data || {}; updateProfileSelect(nextProfiles); } if (e.type === 'done') { rows = nextRows; comments = nextComments; hadCached = true; if (isAll) { writeUsersCache(nextRows, nextProfiles); } if (loader) { loader.style.display = 'none'; } if (e.rows === 0) { body.innerHTML = '<tr><td colspan="10" class="mm-muted">Tidak ada user.</td></tr>'; } updateCommentSelect(nextComments); renderPage(); } if (e.type === 'error' && !hadCached) { body.innerHTML = '<tr><td colspan="10" class="text-red">Gagal memuat user: ' + String(e.error) + '</td></tr>'; } }); return pump(); }); } return pump(); })
+      .catch(function (err) { if (err && err.name === 'AbortError') { return; } if (!hadCached) { body.innerHTML = '<tr><td colspan="10" class="text-red">Gagal memuat user: ' + String(err.message) + '</td></tr>'; } });
+  }
+  function navigateUsers(nextUrl) {
+    if (window.history && window.history.pushState) {
+      window.history.pushState(null, '', nextUrl);
+      if (!applyCachedUsers()) {
+        hadCached = false;
+        rows = [];
+        body.innerHTML = '<tr id="mmUsersLoading"><td colspan="10" class="mm-muted"><i class="fa fa-circle-o-notch fa-spin"></i> Memuat data pengguna dari MikroTik...</td></tr>';
+      }
+      fetchLiveUsers();
+    } else {
+      location.assign(nextUrl);
+    }
+  }
+  var profSel = document.querySelector('select[title="Filter by Profile"]');
+  if (profSel) {
+    profSel.onchange = function () { if (this.value) { navigateUsers(this.value); } };
+  }
+  var commSel = document.getElementById('comment');
+  if (commSel) {
+    commSel.onchange = function () {
+      var v = this.value;
+      var next = v ? ('./?hotspot=users&comment=' + encodeURIComponent(v) + '&session=' + encodeURIComponent(config.session)) : ('./?hotspot=users&profile=all&session=' + encodeURIComponent(config.session));
+      navigateUsers(next);
+    };
+  }
+  window.addEventListener('popstate', function () {
+    applyCachedUsers();
+    fetchLiveUsers();
+  });
+  fetchLiveUsers();
 })();
 </script>
 </div>

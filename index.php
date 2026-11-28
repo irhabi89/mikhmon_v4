@@ -277,12 +277,31 @@ if ($livereport == "enable" || $livereport == "") {
         .then(function (html) {
           if (html.indexOf("data-active-ok=\"1\"") === -1) { throw new Error("Router tidak terhubung"); }
           wrap.innerHTML = html;
+          try { sessionStorage.setItem("mm_live_active:" + location.search, html); } catch (e) {}
           var el = document.getElementById("mmActiveReloadError");
           if (el) { el.style.display = "none"; el.innerHTML = ""; }
         })
         .catch(function (err) { showError(err.message); })
         .finally(function () { loading = false; });
     }
+    wrap.addEventListener("click", function (e) {
+      var a = e.target instanceof Element ? e.target.closest("a[href]") : null;
+      if (!a) { return; }
+      var href = a.getAttribute("href") || "";
+      if (href.indexOf("hotspot=active") === -1) { return; }
+      e.preventDefault();
+      if (window.history && window.history.pushState) {
+        window.history.pushState(null, "", href);
+        try {
+          var cachedHtml = sessionStorage.getItem("mm_live_active:" + location.search);
+          if (cachedHtml && cachedHtml.indexOf("data-active-ok=\"1\"") !== -1) { wrap.innerHTML = cachedHtml; }
+        } catch (err) {}
+        reload();
+      } else {
+        location.assign(href);
+      }
+    });
+    window.addEventListener("popstate", function () { reload(); });
     setInterval(reload, interval);
   })();
   </script>';

@@ -137,14 +137,14 @@ $csvUrl = './process/export_sales.php?' . http_build_query(array_merge($baseQuer
 $printUrl = './report/print.php?' . http_build_query(array_merge($baseQuery, array('token' => $csrf)));
 $deleteButton = '<a class="btn bg-danger" href="#deleteModal"><i class="fa fa-trash"></i> Hapus</a>';
 $actions = $syncButton
-    . ' <a class="btn bg-primary" href="' . mikhmon_e($csvUrl) . '"><i class="fa fa-download"></i> CSV</a>'
-    . ' <a class="btn bg-primary" target="_blank" rel="noopener" href="' . mikhmon_e($printUrl) . '"><i class="fa fa-print"></i> Print</a>'
+    . ' <a class="btn bg-primary" id="mmBtnCsv" href="' . mikhmon_e($csvUrl) . '"><i class="fa fa-download"></i> CSV</a>'
+    . ' <a class="btn bg-primary" id="mmBtnPrint" target="_blank" rel="noopener" href="' . mikhmon_e($printUrl) . '"><i class="fa fa-print"></i> Print</a>'
     . ' ' . $deleteButton;
 ?>
 
 <div class="mm-page">
   <?= $noticeHtml; ?>
-  <?= mikhmon_page_header('Laporan Penjualan', 'fa-money', $actions, 'Periode: <b>' . mikhmon_e($periodLabel) . '</b> &nbsp;|&nbsp; <span id="mmHeaderSummary"><b>' . number_format($filterTotal, 0, ',', '.') . '</b> transaksi · <b>' . mikhmon_e($fmt($filterSum)) . '</b></span> &nbsp;|&nbsp; <span id="mmPageSourceWrap">' . mikhmon_source_badge($status) . '</span>'); ?>
+  <?= mikhmon_page_header('Laporan Penjualan', 'fa-money', $actions, 'Periode: <b id="mmPeriodLabel">' . mikhmon_e($periodLabel) . '</b> &nbsp;|&nbsp; <span id="mmHeaderSummary"><b>' . number_format($filterTotal, 0, ',', '.') . '</b> transaksi · <b>' . mikhmon_e($fmt($filterSum)) . '</b></span> &nbsp;|&nbsp; <span id="mmPageSourceWrap">' . mikhmon_source_badge($status) . '</span>'); ?>
 
   <div class="mm-kpi-grid">
     <div class="mm-kpi">
@@ -186,13 +186,13 @@ $actions = $syncButton
 
   <section class="mm-card">
     <div class="mm-card-head">
-      <h2><i class="fa fa-list"></i> <?= mikhmon_e($periodLabel); ?></h2>
+      <h2 id="mmCardPeriodLabel"><i class="fa fa-list"></i> <span><?= mikhmon_e($periodLabel); ?></span></h2>
       <div class="mm-page-actions">
         <span class="mm-muted" id="mmReportTotal">Total: <b><?= number_format($filterTotal, 0, ',', '.'); ?></b> transaksi · <b><?= mikhmon_e($fmt($filterSum)); ?></b></span>
       </div>
     </div>
     <div class="mm-card-body">
-      <form method="get" action="./" class="mm-toolbar">
+      <form method="get" action="./" class="mm-toolbar" id="mmFilterForm">
         <input type="hidden" name="report" value="selling">
         <input type="hidden" name="session" value="<?= mikhmon_e($session); ?>">
         <div class="mm-field">
@@ -237,7 +237,7 @@ $actions = $syncButton
           <input class="mm-input" id="f-q" type="search" name="q" value="<?= mikhmon_e($q); ?>" placeholder="username / komentar / profil">
         </div>
         <button class="btn bg-primary" type="submit"><i class="fa fa-search"></i> Filter</button>
-        <a class="btn bg-secondary" href="./?report=selling&session=<?= mikhmon_e($session); ?>"><i class="fa fa-eraser"></i> Reset</a>
+        <a class="btn bg-secondary" id="mmFilterReset" href="./?report=selling&session=<?= mikhmon_e($session); ?>"><i class="fa fa-eraser"></i> Reset</a>
       </form>
 
       <?php if ($useLiveFallback): ?>
@@ -351,6 +351,54 @@ $actions = $syncButton
             if (refreshTimer) { clearTimeout(refreshTimer); }
             refreshTimer = window.setTimeout(loadLive, autoReloadMs);
           }
+          function matchLiveRow(row, params) {
+            var d = String(row.date_key || '');
+            var df = params.get('date_from') || '';
+            var dt = params.get('date_to') || '';
+            var mn = params.get('month_name') || '';
+            var yr = params.get('year') || '';
+            var srv = params.get('server') || '';
+            var q = (params.get('q') || '').trim().toLowerCase();
+            if (df && d < df) { return false; }
+            if (dt && d > dt) { return false; }
+            if (mn && d.slice(5, 7) !== mn) { return false; }
+            if (yr && d.slice(0, 4) !== yr) { return false; }
+            if (srv) {
+              var rs = String(row.server_name || '');
+              if (srv === '__none__' ? rs !== '' : rs !== srv) { return false; }
+            }
+            if (q) {
+              var hay = (String(row.username || '') + ' ' + String(row.sale_comment || '') + ' ' + String(row.profile || '')).toLowerCase();
+              if (hay.indexOf(q) === -1) { return false; }
+            }
+            return true;
+          }
+          function isUnfiltered(params) {
+            return !(params.get('date_from') || params.get('date_to') || params.get('month_name') || params.get('year') || params.get('server') || (params.get('q') || '').trim());
+          }
+          var sessionKey = <?= json_encode((string)$session); ?>;
+          var masterKey = 'mm_live_sales_all:' + sessionKey;
+          function readLiveCache() {
+            try {
+              var raw = sessionStorage.getItem(masterKey);
+              if (!raw) { return null; }
+              var parsed = JSON.parse(raw);
+              return parsed && Array.isArray(parsed.rows) ? parsed.rows : null;
+            } catch (e) { return null; }
+          }
+          function writeLiveCache(rows) {
+            try { sessionStorage.setItem(masterKey, JSON.stringify({ts: Date.now(), rows: rows})); } catch (e) {}
+          }
+          function applyInstantCache() {
+            var cached = readLiveCache();
+            if (!cached) { return false; }
+            var params = new URLSearchParams(location.search);
+            allRows = cached.filter(function (r) { return matchLiveRow(r, params); });
+            page = 1;
+            renderPage();
+            setInfo('Menampilkan ' + allRows.length.toLocaleString('id-ID') + ' record cache · memperbarui live…');
+            return true;
+          }
           function loadLive() {
             if (inFlight || document.hidden || window.MM_SYNC_BUSY) {
               scheduleRefresh();
@@ -361,7 +409,8 @@ $actions = $syncButton
             inFlight = true;
             var nextRows = [];
             var hadRows = allRows.length > 0;
-            setInfo('Memperbarui data MikroTik...');
+            var params = new URLSearchParams(location.search);
+            if (!hadRows) { setInfo('Memperbarui data MikroTik...'); }
             var search = location.search.replace(/^\?/, '');
             var url = './process/live_sales.php?' + (search ? search + '&' : '') + 'compare=1';
             fetch(url, {credentials: 'same-origin', signal: controller.signal, headers: {'Accept': 'application/x-ndjson'}})
@@ -380,14 +429,13 @@ $actions = $syncButton
                       var event; try { event = JSON.parse(line); } catch (e) { return; }
                       if (event.type === 'row') {
                         nextRows.push(event.data);
-                        // Initial load: show rows progressively. Refresh: keep the
-                        // previous complete table/KPI until the new scan finishes.
                         if (!hadRows) { allRows.push(event.data); scheduleRender(); }
                       }
                       if (event.type === 'compare') { showCompare(event); }
-                      if (event.type === 'progress') { setInfo('Membaca ' + Number(event.rows).toLocaleString('id-ID') + ' record...'); }
+                      if (event.type === 'progress' && !hadRows) { setInfo('Membaca ' + Number(event.rows).toLocaleString('id-ID') + ' record...'); }
                       if (event.type === 'done') {
                         allRows = nextRows;
+                        if (isUnfiltered(params)) { writeLiveCache(nextRows); }
                         page = 1;
                         renderPage();
                         setInfo('Selesai: ' + Number(event.rows).toLocaleString('id-ID') + ' record dari MikroTik.');
@@ -414,8 +462,43 @@ $actions = $syncButton
                 scheduleRefresh();
               });
           }
+          var filterForm = document.getElementById('mmFilterForm');
+          var resetBtn = document.getElementById('mmFilterReset');
+          function navigateLive(nextUrl) {
+            if (window.history && window.history.pushState) {
+              window.history.pushState(null, '', nextUrl);
+              if (!applyInstantCache()) {
+                allRows = [];
+                renderPage();
+              }
+              loadLive();
+            } else {
+              location.assign(nextUrl);
+            }
+          }
+          if (filterForm) {
+            filterForm.addEventListener('submit', function (e) {
+              e.preventDefault();
+              var fd = new FormData(filterForm);
+              var qs = new URLSearchParams();
+              fd.forEach(function (v, k) { if (String(v) !== '') { qs.set(k, String(v)); } });
+              navigateLive('./?' + qs.toString());
+            });
+          }
+          if (resetBtn) {
+            resetBtn.addEventListener('click', function (e) {
+              e.preventDefault();
+              if (filterForm) { filterForm.reset(); }
+              navigateLive(resetBtn.getAttribute('href'));
+            });
+          }
+          window.addEventListener('popstate', function () {
+            if (!applyInstantCache()) { allRows = []; renderPage(); }
+            loadLive();
+          });
           var cta = document.getElementById('mmLiveSyncCta');
           if (cta) { cta.addEventListener('click', function () { document.dispatchEvent(new CustomEvent('mm-start-sync')); }); }
+          applyInstantCache();
           loadLive();
         })();
         </script>
@@ -531,6 +614,24 @@ $actions = $syncButton
             if (headSummary) { headSummary.innerHTML = totalHtml; }
             var repTotal = document.getElementById('mmReportTotal');
             if (repTotal) { repTotal.innerHTML = 'Total: ' + totalHtml; }
+            if (typeof d.period_label === 'string') {
+              setText('mmPeriodLabel', d.period_label);
+              var cardLbl = document.querySelector('#mmCardPeriodLabel span');
+              if (cardLbl) { cardLbl.textContent = d.period_label; }
+            }
+            var qsNow = location.search.replace(/^\?/, '');
+            ['mmBtnCsv', 'mmBtnPrint'].forEach(function (id) {
+              var link = document.getElementById(id);
+              if (!link) { return; }
+              try {
+                var u = new URL(link.getAttribute('href'), location.href);
+                var tok = u.searchParams.get('token');
+                var nextParams = new URLSearchParams(qsNow);
+                nextParams.delete('report');
+                if (tok) { nextParams.set('token', tok); }
+                link.setAttribute('href', u.pathname + '?' + nextParams.toString());
+              } catch (e) {}
+            });
 
             var st = d.stats || {};
             var monthSum = Number(st.month_sum || 0);
@@ -550,17 +651,10 @@ $actions = $syncButton
             setText('mmKpiTotalSum', money(st.total_sum || 0));
           }
 
-          function runCycle() {
-            if (inFlight || document.hidden || window.MM_SYNC_BUSY) {
-              scheduleNext();
-              return;
-            }
-            inFlight = true;
+          function fetchDbOnly() {
             var qs = location.search.replace(/^\?/, '');
             var reportUrl = './process/sales_report_data.php?' + (qs ? qs : ('session=' + encodeURIComponent(sessionName)));
-            var compareUrl = './process/live_sales.php?session=' + encodeURIComponent(sessionName) + '&summary=1&compare=1';
-
-            var pDb = fetch(reportUrl, {credentials: 'same-origin'})
+            return fetch(reportUrl, {credentials: 'same-origin'})
               .then(function (r) { return r.json().then(function (d) { return {status: r.status, data: d}; }); })
               .then(function (res) {
                 if (res.data && res.data.db_error) {
@@ -572,15 +666,46 @@ $actions = $syncButton
                 }
               })
               .catch(function () { /* keep current DB snapshot */ });
+          }
 
-            var pCmp = fetch(compareUrl, {credentials: 'same-origin'})
-              .then(function (r) { return r.json(); })
-              .then(function (d) {
-                if (d && d.ok && d.compare) {
-                  updateCompareBanner(d.compare);
-                }
-              })
-              .catch(function () { /* keep last compare state */ });
+          var firstRun = true;
+          function runCycle() {
+            if (inFlight || document.hidden || window.MM_SYNC_BUSY) {
+              scheduleNext();
+              return;
+            }
+            inFlight = true;
+            var pDb = fetchDbOnly();
+            var pCmp;
+            if (firstRun) {
+              firstRun = false;
+              pCmp = fetch('./process/live_compare.php?session=' + encodeURIComponent(sessionName), {credentials: 'same-origin'})
+                .then(function (r) { return r.json(); })
+                .then(function (cached) {
+                  var fresh = false;
+                  if (cached && cached.ok && cached.checked_at) {
+                    updateCompareBanner(cached);
+                    var ts = Date.parse(String(cached.checked_at).replace(' ', 'T'));
+                    if (!isNaN(ts) && (Date.now() - ts) < Math.max(15000, autoReloadMs)) { fresh = true; }
+                  }
+                  if (fresh) { return null; }
+                  var compareUrl = './process/live_sales.php?session=' + encodeURIComponent(sessionName) + '&summary=1&compare=1';
+                  return fetch(compareUrl, {credentials: 'same-origin'})
+                    .then(function (r) { return r.json(); })
+                    .then(function (d) { if (d && d.ok && d.compare) { updateCompareBanner(d.compare); } });
+                })
+                .catch(function () { /* keep last compare state */ });
+            } else {
+              var compareUrl = './process/live_sales.php?session=' + encodeURIComponent(sessionName) + '&summary=1&compare=1';
+              pCmp = fetch(compareUrl, {credentials: 'same-origin'})
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                  if (d && d.ok && d.compare) {
+                    updateCompareBanner(d.compare);
+                  }
+                })
+                .catch(function () { /* keep last compare state */ });
+            }
 
             Promise.all([pDb, pCmp]).then(function () {
               inFlight = false;
@@ -590,6 +715,57 @@ $actions = $syncButton
               scheduleNext();
             });
           }
+
+          function syncFormFromSearch() {
+            var form = document.getElementById('mmFilterForm');
+            if (!form) { return; }
+            var params = new URLSearchParams(location.search);
+            ['date_from', 'date_to', 'month_name', 'year', 'server', 'q'].forEach(function (name) {
+              var el = form.elements[name];
+              if (el) { el.value = params.get(name) || ''; }
+            });
+          }
+
+          function navigateDb(nextUrl) {
+            if (window.history && window.history.pushState) {
+              window.history.pushState(null, '', nextUrl);
+              syncFormFromSearch();
+              fetchDbOnly();
+            } else {
+              location.assign(nextUrl);
+            }
+          }
+
+          var filterForm = document.getElementById('mmFilterForm');
+          if (filterForm) {
+            filterForm.addEventListener('submit', function (e) {
+              e.preventDefault();
+              var fd = new FormData(filterForm);
+              var qs = new URLSearchParams();
+              fd.forEach(function (v, k) { if (String(v) !== '') { qs.set(k, String(v)); } });
+              navigateDb('./?' + qs.toString());
+            });
+          }
+          var resetBtn = document.getElementById('mmFilterReset');
+          if (resetBtn) {
+            resetBtn.addEventListener('click', function (e) {
+              e.preventDefault();
+              navigateDb(resetBtn.getAttribute('href'));
+            });
+          }
+          var pagerEl = document.getElementById('mmDbPager');
+          if (pagerEl) {
+            pagerEl.addEventListener('click', function (e) {
+              var a = e.target instanceof Element ? e.target.closest('a[href]') : null;
+              if (!a) { return; }
+              e.preventDefault();
+              navigateDb(a.getAttribute('href'));
+            });
+          }
+          window.addEventListener('popstate', function () {
+            syncFormFromSearch();
+            fetchDbOnly();
+          });
 
           function scheduleNext() {
             if (timer) { clearTimeout(timer); }

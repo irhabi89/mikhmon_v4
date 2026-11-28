@@ -31,6 +31,7 @@ if ($session === '' || preg_match('/^[A-Za-z0-9_.-]+$/', $session) !== 1) {
 $summaryMode = isset($_GET['summary']) && (string)$_GET['summary'] === '1';
 $streamSummary = $summaryMode && isset($_GET['stream']) && (string)$_GET['stream'] === '1';
 $compareMode = isset($_GET['compare']) && (string)$_GET['compare'] === '1';
+$fresh = isset($_GET['fresh']) && (string)$_GET['fresh'] === '1';
 $meta = \Mikhmon\Support\SalesFilter::fromQuery($_GET);
 $filter = $meta['filter'];
 
@@ -100,61 +101,98 @@ $flushCompareBuffer = static function () use (&$compareBuffer, &$compareMatched,
 
 session_write_close();
 
-try {
-    $client = mikhmon_safe_router_client($session, $summaryMode);
-    $client->connect();
-    if (!$summaryMode) {
-        echo json_encode(array('type' => 'meta', 'source' => 'router', 'session' => $session, 'db_error' => $dbError)) . "\n";
-        flush();
+$emitRow = static function (array $parsed, string $name) use ($filter, $summaryMode, $streamSummary, $compareMode, $dbAvailable, &$count, $today, $month, &$summary, &$compareTotal, &$compareInvalid, &$compareSeen, &$compareBuffer, $flushCompareBuffer, $started): void {
+    if ($compareMode && !isset($compareSeen[$name])) {
+        $compareSeen[$name] = true;
+        $compareTotal++;
+        if ($dbAvailable) {
+            $compareBuffer[] = $name;
+            if (count($compareBuffer) >= 500) {
+                $flushCompareBuffer();
+            }
+        }
     }
-    $result = $client->stream('/system/script/print', array('.proplist' => '.id,name,comment'), function (array $row) use ($filter, $summaryMode, $compareMode, $dbAvailable, &$count, $today, $month, &$summary, &$compareTotal, &$compareInvalid, &$compareSeen, &$compareBuffer, $flushCompareBuffer) {
-        $name = isset($row['name']) ? (string)$row['name'] : '';
-        $comment = isset($row['comment']) ? (string)$row['comment'] : '';
-        if ($name === '' || !\Mikhmon\Support\RecordParser::isSalesRecord($name, $comment)) { return true; }
-        $parsed = \Mikhmon\Support\RecordParser::parse($name);
-        if ($compareMode && !isset($compareSeen[$name])) {
-            $compareSeen[$name] = true;
+    if (!mm_live_match($parsed, $filter)) { return; }
+    $count++;
+    $price = (float)($parsed['price'] ?? 0);
+    $summary['total_count']++;
+    $summary['total_sum'] += $price;
+    if (($parsed['date_key'] ?? '') === $today) { $summary['today_count']++; $summary['today_sum'] += $price; }
+    if (($parsed['month_key'] ?? '') === $month) { $summary['month_count']++; $summary['month_sum'] += $price; }
+    if ($summaryMode) {
+        if ($streamSummary && $count % 100 === 0) {
+            echo json_encode(array('type' => 'progress', 'rows' => $count, 'today_count' => $summary['today_count'], 'month_count' => $summary['month_count'])) . "\n";
+            flush();
+        }
+        return;
+    }
+    echo json_encode(array('type' => 'row', 'data' => array(
+        'date_key' => (string)($parsed['date_key'] ?? ''),
+        'time_key' => (string)($parsed['time_key'] ?? ''),
+        'server_name' => (string)($parsed['server_name'] ?? ''),
+        'username' => (string)($parsed['username'] ?? ''),
+        'profile' => (string)($parsed['profile'] ?? ''),
+        'sale_comment' => (string)($parsed['sale_comment'] ?? ''),
+        'price' => $price,
+        'name' => $name,
+    )), JSON_UNESCAPED_SLASHES) . "\n";
+    if ($count % 100 === 0) { echo json_encode(array('type' => 'progress', 'rows' => $count, 'seconds' => round(microtime(true) - $started, 1))) . "\n"; flush(); }
+};
+
+try {
+    $cached = !$fresh ? mikhmon_live_cache_read('live-sales', $session, 15) : null;
+    if (is_array($cached) && isset($cached['rows']) && is_array($cached['rows'])) {
+        $compareInvalid = isset($cached['invalid']) ? (int)$cached['invalid'] : 0;
+        if (!$summaryMode) {
+            echo json_encode(array('type' => 'meta', 'source' => 'cache', 'session' => $session, 'db_error' => $dbError)) . "\n";
+            flush();
+        }
+        foreach ($cached['rows'] as $entry) {
+            if (!is_array($entry) || empty($entry['name'])) { continue; }
+            $emitRow($entry, (string)$entry['name']);
+        }
+        $flushCompareBuffer();
+        $resultOk = true;
+        $resultError = '';
+        $sourceLabel = 'cache';
+    } else {
+        $cachedRows = array();
+        $client = mikhmon_safe_router_client($session, $summaryMode);
+        $client->connect();
+        if (!$summaryMode) {
+            echo json_encode(array('type' => 'meta', 'source' => 'router', 'session' => $session, 'db_error' => $dbError)) . "\n";
+            flush();
+        }
+        $result = $client->stream('/system/script/print', array('.proplist' => '.id,name,comment'), function (array $row) use ($emitRow, &$compareInvalid, &$compareSeen, &$cachedRows) {
+            $name = isset($row['name']) ? (string)$row['name'] : '';
+            $comment = isset($row['comment']) ? (string)$row['comment'] : '';
+            if ($name === '' || !\Mikhmon\Support\RecordParser::isSalesRecord($name, $comment)) { return true; }
+            $parsed = \Mikhmon\Support\RecordParser::parse($name);
             if ($parsed === null) {
-                $compareInvalid++;
-            } else {
-                $compareTotal++;
-                if ($dbAvailable) {
-                    $compareBuffer[] = $name;
-                    if (count($compareBuffer) >= 500) {
-                        $flushCompareBuffer();
-                    }
+                if (!isset($compareSeen[$name])) {
+                    $compareSeen[$name] = true;
+                    $compareInvalid++;
                 }
+                return true;
             }
-        }
-        if ($parsed === null || !mm_live_match($parsed, $filter)) { return true; }
-        $count++;
-        $price = (float)($parsed['price'] ?? 0);
-        $summary['total_count']++;
-        $summary['total_sum'] += $price;
-        if (($parsed['date_key'] ?? '') === $today) { $summary['today_count']++; $summary['today_sum'] += $price; }
-        if (($parsed['month_key'] ?? '') === $month) { $summary['month_count']++; $summary['month_sum'] += $price; }
-        if ($summaryMode) {
-            if ($streamSummary && $count % 100 === 0) {
-                echo json_encode(array('type' => 'progress', 'rows' => $count, 'today_count' => $summary['today_count'], 'month_count' => $summary['month_count'])) . "\n";
-                flush();
-            }
+            $parsed['name'] = $name;
+            $cachedRows[] = $parsed;
+            $emitRow($parsed, $name);
             return true;
+        }, $summaryMode ? 45.0 : 120.0);
+        $client->close();
+        $flushCompareBuffer();
+        $resultOk = (bool)$result->ok;
+        $resultError = (string)$result->error;
+        $sourceLabel = 'router';
+        if ($resultOk) {
+            mikhmon_live_cache_write('live-sales', $session, array(
+                'rows' => $cachedRows,
+                'invalid' => $compareInvalid,
+                'cached_at' => time(),
+            ));
         }
-        echo json_encode(array('type' => 'row', 'data' => array(
-            'date_key' => (string)($parsed['date_key'] ?? ''),
-            'time_key' => (string)($parsed['time_key'] ?? ''),
-            'server_name' => (string)($parsed['server_name'] ?? ''),
-            'username' => (string)($parsed['username'] ?? ''),
-            'profile' => (string)($parsed['profile'] ?? ''),
-            'sale_comment' => (string)($parsed['sale_comment'] ?? ''),
-            'price' => $price,
-            'name' => $name,
-        )), JSON_UNESCAPED_SLASHES) . "\n";
-        if ($count % 100 === 0) { echo json_encode(array('type' => 'progress', 'rows' => $count, 'seconds' => round(microtime(true) - $started, 1))) . "\n"; flush(); }
-        return true;
-    }, $summaryMode ? 45.0 : 120.0);
-    $client->close();
-    $flushCompareBuffer();
+    }
 
     $compare = null;
     if ($compareMode && $dbAvailable) {
@@ -171,10 +209,10 @@ try {
             'synced_percent' => $compareTotal > 0 ? round($compareMatched / $compareTotal * 100, 1) : null,
             'unsynced_percent' => $compareTotal > 0 ? round($compareMissing / $compareTotal * 100, 1) : null,
             'verified' => false,
-            'complete' => (bool)$result->ok,
+            'complete' => $resultOk,
             'checked_at' => date('Y-m-d H:i:s'),
         );
-        if ($result->ok) {
+        if ($resultOk) {
             mikhmon_write_live_compare_cache($session, $compare);
         }
     }
@@ -184,16 +222,16 @@ try {
             if ($compare !== null) {
                 echo json_encode($compare, JSON_UNESCAPED_SLASHES) . "\n";
             }
-            echo json_encode(array('type' => 'summary', 'ok' => true, 'source' => 'router', 'count' => $count, 'summary' => $summary, 'compare' => $compare, 'db_error' => $dbError), JSON_UNESCAPED_SLASHES) . "\n";
-            echo json_encode(array('type' => 'done', 'rows' => $count, 'complete' => $result->ok, 'error' => $result->error), JSON_UNESCAPED_SLASHES) . "\n";
+            echo json_encode(array('type' => 'summary', 'ok' => true, 'source' => $sourceLabel, 'count' => $count, 'summary' => $summary, 'compare' => $compare, 'db_error' => $dbError), JSON_UNESCAPED_SLASHES) . "\n";
+            echo json_encode(array('type' => 'done', 'rows' => $count, 'complete' => $resultOk, 'error' => $resultError), JSON_UNESCAPED_SLASHES) . "\n";
         } else {
-            echo json_encode(array('ok' => true, 'source' => 'router', 'count' => $count, 'summary' => $summary, 'compare' => $compare, 'db_error' => $dbError), JSON_UNESCAPED_SLASHES) . "\n";
+            echo json_encode(array('ok' => true, 'source' => $sourceLabel, 'count' => $count, 'summary' => $summary, 'compare' => $compare, 'db_error' => $dbError), JSON_UNESCAPED_SLASHES) . "\n";
         }
     } else {
         if ($compare !== null) {
             echo json_encode($compare, JSON_UNESCAPED_SLASHES) . "\n";
         }
-        echo json_encode(array('type' => 'done', 'rows' => $count, 'complete' => $result->ok, 'error' => $result->error, 'db_error' => $dbError), JSON_UNESCAPED_SLASHES) . "\n";
+        echo json_encode(array('type' => 'done', 'rows' => $count, 'complete' => $resultOk, 'error' => $resultError, 'db_error' => $dbError), JSON_UNESCAPED_SLASHES) . "\n";
     }
 } catch (Throwable $e) {
     if ($summaryMode) {
